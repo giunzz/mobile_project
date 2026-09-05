@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "733482868362",
+    "firebase_url": "https://ai-smart-pet-feeder-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "ai-smart-pet-feeder",
+    "storage_bucket": "ai-smart-pet-feeder.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:733482868362:android:19e7f514a8f58556055773",
+        "android_client_info": {
+          "package_name": "com.aismartpetfeeder"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCrtHqMlG023eZUkVuE6lQmuo_rPXk8PS8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
