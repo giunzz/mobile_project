@@ -1,0 +1,6 @@
+[PASS] main sketch exists
+[PASS] camera pins present
+[PASS] servo pins present
+[PASS] firebase root present
+[PASS] cooldown 10 min
+[PASS] calibration commands

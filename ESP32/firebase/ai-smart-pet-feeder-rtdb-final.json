@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "devices": {
+    "feeder-01": {
+      "status": {
+        "online": false,
+        "firmwareVersion": "1.0.0",
+        "ipAddress": "",
+        "wifiRssi": 0,
+        "lastSeenEpoch": 0,
+        "operatingMode": "manual",
+        "errorCode": "none"
+      },
+      "config": {
+        "speciesProfiles": {
+          "dog": {
+            "portionGrams": 80,
+            "dailyLimitGrams": 320,
+            "cooldownMinutes": 10,
+            "autoFeedEnabled": false,
+            "notificationsEnabled": true
+          },
+          "cat": {
+            "portionGrams": 45,
+            "dailyLimitGrams": 180,
+            "cooldownMinutes": 10,
+            "autoFeedEnabled": false,
+            "notificationsEnabled": true
+          }
+        },
+        "schedules": {
+          "dog": {
+            "schedule-01": {
+              "time": "07:00",
+              "portionGrams": 80,
+              "enabled": false
+            }
+          },
+          "cat": {
+            "schedule-01": {
+              "time": "07:00",
+              "portionGrams": 45,
+              "enabled": false
+            }
+          }
+        }
+      },
+      "runtime": {
+        "latestDetection": {
+          "speciesId": "none",
+          "confidence": 0.0,
+          "capturedAtEpoch": 0
+        },
+        "feeding": {
+          "status": "idle",
+          "activeSpecies": "none",
+          "targetGrams": 0,
+          "actualGrams": 0,
+          "ledOn": false
+        },
+        "cooldown": {
+          "dogUntilEpoch": 0,
+          "catUntilEpoch": 0
+        }
+      },
+      "command": {
+        "requestId": "",
+        "type": "none",
+        "speciesId": "none",
+        "targetGrams": 0,
+        "status": "idle",
+        "requestedAtEpoch": 0
+      }
+    }
+  }
+}

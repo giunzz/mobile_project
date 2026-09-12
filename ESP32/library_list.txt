@@ -1,0 +1,26 @@
+Arduino IDE libraries required
+
+1. ESP32 board package by Espressif Systems
+   Board: ESP32S3 Dev Module
+   PSRAM: OPI PSRAM
+
+2. ESP32Servo
+   Header: <ESP32Servo.h>
+
+3. HX711
+   Header: "HX711.h"
+   The firmware expects the common HX711 API:
+   begin(), is_ready(), wait_ready_timeout(), tare(), set_scale(),
+   get_units(), get_value().
+
+4. FirebaseClient by Mobizt
+   Header: <FirebaseClient.h>
+   Features used:
+   UserAuth + RealtimeDatabase
+
+Built-in ESP32/Arduino components:
+- WiFi
+- WiFiClientSecure
+- Preferences
+- esp_camera
+- time/NTP
