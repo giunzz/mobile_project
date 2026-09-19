@@ -1,14 +1,19 @@
 import { SpeciesId, SpeciesProfile } from '../types/models';
 
 export const formatDateTime = (value: string) =>
-  new Intl.DateTimeFormat('en', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
+  !Number.isFinite(Date.parse(value))
+    ? 'Time not reported'
+    : new Intl.DateTimeFormat('en', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(value));
 
 export const formatTimeAgo = (value: string) => {
+  if (!Number.isFinite(Date.parse(value))) {
+    return 'Time not reported';
+  }
   const minutes = Math.max(
     0,
     Math.round((Date.now() - new Date(value).getTime()) / 60000),
@@ -26,5 +31,7 @@ export const formatTimeAgo = (value: string) => {
   return `${Math.round(hours / 24)} days ago`;
 };
 
-export const findProfile = (profiles: SpeciesProfile[], speciesId: SpeciesId) =>
-  profiles.find(item => item.id === speciesId);
+export const findProfile = (
+  profiles: SpeciesProfile[],
+  speciesId: SpeciesId | 'none',
+) => profiles.find(item => item.id === speciesId);

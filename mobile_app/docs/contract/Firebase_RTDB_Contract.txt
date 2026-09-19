@@ -1,0 +1,44 @@
+AI SMART PET FEEDER - FIREBASE RTDB CONTRACT
+
+DEVICE ID
+/devices/feeder-01
+
+APP -> ESP32
+/devices/feeder-01/command
+  requestId
+  type              : "feed_now" | "none"
+  speciesId         : "dog" | "cat" | "none"
+  targetGrams
+  status            : "pending" | "processing" | "completed" | "failed" | "idle"
+  requestedAtEpoch
+
+APP -> ESP32 CONFIG
+/devices/feeder-01/config/speciesProfiles/{dog|cat}
+  portionGrams
+  dailyLimitGrams
+  cooldownMinutes
+  autoFeedEnabled
+  notificationsEnabled
+
+/devices/feeder-01/config/schedules/{dog|cat}/{scheduleId}
+  time
+  portionGrams
+  enabled
+
+ESP32 -> APP
+/devices/feeder-01/status
+/devices/feeder-01/runtime/feeding
+/devices/feeder-01/runtime/cooldown
+/devices/feeder-01/runtime/latestDetection
+
+FUTURE DYNAMIC NODE
+Firmware will create feeding history records dynamically at:
+/devices/feeder-01/feedingHistory/{pushId}
+
+NOTES
+- Feeder 1 = DOG = Servo 1 + Load Cell 1
+- Feeder 2 = CAT = Servo 2 + Load Cell 2
+- Default portion: DOG 80 g, CAT 45 g
+- Default cooldown: 10 minutes per species
+- Firmware should use Firebase targetGrams when valid; otherwise fall back to the default portion.
+- AI is not required for Firmware V1. runtime/latestDetection stays "none" until Edge AI is integrated.

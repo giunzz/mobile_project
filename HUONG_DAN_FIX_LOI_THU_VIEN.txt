@@ -1,0 +1,9 @@
+CÁCH FIX LỖI THIẾU THƯ VIỆN TENSORFLOW (all_ops_resolver.h):
+
+1. KHÔNG gõ tìm kiếm "all_ops_resolver" trong Library Manager (vì đó là file code C++, không phải tên thư viện nên sẽ không tìm thấy).
+2. Tôi đã để sẵn file thư viện chuẩn trong thư mục này: "Arduino_TensorFlowLite_ESP32.zip".
+3. Trên Arduino IDE, vào menu:
+   Sketch -> Include Library -> Add .ZIP Library...
+4. Chọn file "Arduino_TensorFlowLite_ESP32.zip" vừa thấy.
+5. Arduino IDE sẽ hiện thông báo "Library added to your libraries".
+6. Bấm Verify (nút dấu tích) biên dịch lại là thành công 100%!

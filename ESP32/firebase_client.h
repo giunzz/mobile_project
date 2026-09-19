@@ -31,6 +31,8 @@ bool firebaseSetFeedingRuntime(const String &status,
                                float actualGrams,
                                bool ledOn);
 
+bool firebaseSetLatestDetection(const String &speciesId, float confidence);
+
 bool firebasePushHistory(const String &requestId,
                          const String &speciesId,
                          const String &mode,

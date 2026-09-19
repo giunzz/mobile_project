@@ -7,8 +7,8 @@ import { colors, radii, spacing } from '../theme';
 
 export function LoginScreen() {
   const { login, register } = useFeeder();
-  const [email, setEmail] = useState('demo@smartfeeder.app');
-  const [password, setPassword] = useState('123456');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -106,8 +106,8 @@ export function LoginScreen() {
           variant="secondary"
         />
         <Text style={styles.demo}>
-          Firebase Authentication is active. New accounts automatically receive
-          starter feeder data in Realtime Database.
+          Use an account authorized for this feeder. Creating an account does
+          not grant access to the device; ask the project owner to grant it.
         </Text>
       </View>
     </Screen>

@@ -247,6 +247,16 @@ bool firebaseSetFeedingRuntime(const String &status,
   return ok;
 }
 
+bool firebaseSetLatestDetection(const String &speciesId, float confidence) {
+  if (!firebaseReady()) return false;
+
+  String base = pathOf("/runtime/latestDetection");
+  bool ok = dbSetString(base + "/speciesId", speciesId);
+  ok &= dbSetFloat(base + "/confidence", confidence);
+  ok &= dbSetUInt64(base + "/capturedAtEpoch", currentEpochSeconds());
+  return ok;
+}
+
 bool firebasePushHistory(const String &requestId,
                          const String &speciesId,
                          const String &mode,
@@ -291,4 +301,5 @@ void firebaseHeartbeat(const String &errorCode) {
   dbSetInt(base + "/wifiRssi", WiFi.RSSI());
   dbSetUInt64(base + "/lastSeenEpoch", currentEpochSeconds());
   dbSetString(base + "/errorCode", errorCode);
+  dbSetString(base + "/operatingMode", ENABLE_AI ? "automatic" : "manual");
 }

@@ -5,10 +5,15 @@
 #define DEVICE_ID "feeder-01"
 #define DEVICE_ROOT "/devices/" DEVICE_ID
 
-// V1 scope
+// Scope configuration
 #define ENABLE_CAMERA_V1 true
 #define ENABLE_BUZZER true
 #define ENABLE_FIREBASE true
+#define ENABLE_AI true
+
+// AI detection settings
+constexpr float AI_CONFIDENCE_THRESHOLD = 0.80f;
+constexpr uint32_t AI_SCAN_INTERVAL_MS = 5000;
 
 // Servo geometry
 constexpr int SERVO1_CLOSE_ANGLE = 0;

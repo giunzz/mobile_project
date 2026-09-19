@@ -19,7 +19,7 @@ const menuItems: {
     route: 'history',
     icon: '↻',
     title: 'Feeding history',
-    hint: 'Review all completed and failed commands',
+    hint: 'Review measured records from the ESP32',
   },
   {
     route: 'statistics',
@@ -31,12 +31,12 @@ const menuItems: {
     route: 'notifications',
     icon: '!',
     title: 'Notifications',
-    hint: 'Safety, food and device alerts',
+    hint: 'Feeding results received in the app',
   },
   {
     route: 'device',
     icon: '⌁',
-    title: 'Device settings',
+    title: 'Device status',
     hint: 'Connection, firmware and edge AI status',
   },
 ];

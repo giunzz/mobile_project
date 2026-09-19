@@ -1,6 +1,6 @@
-export type SpeciesId = 'cat' | 'dog' | 'rabbit' | 'hamster' | 'guinea_pig';
+export type SpeciesId = 'cat' | 'dog';
 
-export type FeedingMode = 'automatic' | 'manual';
+export type FeedingMode = 'automatic' | 'manual' | 'unknown';
 export type FeedingResult = 'completed' | 'failed' | 'cancelled';
 export type FeedingCommandStatus =
   | 'pending'
@@ -34,6 +34,8 @@ export interface SpeciesProfile {
   dailyLimitGrams: number;
   autoFeedEnabled: boolean;
   notificationsEnabled: boolean;
+  cooldownMinutes: number;
+  configValid: boolean;
 }
 
 export interface FeedingSchedule {
@@ -53,6 +55,7 @@ export interface FeedingHistory {
   targetGrams: number;
   actualGrams: number;
   result: FeedingResult;
+  requestId?: string;
 }
 
 export interface NotificationItem {
@@ -69,9 +72,12 @@ export interface DeviceStatus {
   id: string;
   name: string;
   online: boolean;
-  foodLevelPercent: number;
-  wifiStrengthPercent: number;
-  lidClosed: boolean;
+  foodLevelPercent: number | null;
+  wifiStrengthPercent: number | null;
+  lidClosed: boolean | null;
+  wifiRssi: number | null;
+  lastSeenMs: number;
+  errorCode: string;
   firmwareVersion: string;
   ipAddress: string;
   lastSync: string;
@@ -80,7 +86,7 @@ export interface DeviceStatus {
 }
 
 export interface DetectionStatus {
-  speciesId: SpeciesId;
+  speciesId: SpeciesId | 'none';
   confidence: number;
   capturedAt: string;
 }
@@ -93,6 +99,18 @@ export interface AppSnapshot {
   history: FeedingHistory[];
   notifications: NotificationItem[];
   commands: FeedingCommandRecord[];
+  connected: boolean;
+  warnings: string[];
+  runtime: {
+    feeding: {
+      status: string;
+      activeSpecies: SpeciesId | 'none';
+      targetGrams: number | null;
+      actualGrams: number | null;
+      ledOn: boolean;
+    };
+    cooldownUntilMs: Record<SpeciesId, number | null>;
+  };
 }
 
 export interface FeedCommand {
@@ -101,8 +119,6 @@ export interface FeedCommand {
 }
 
 export interface FeedCommandResult {
-  history: FeedingHistory;
-  notification: NotificationItem;
   command: FeedingCommandRecord;
 }
 

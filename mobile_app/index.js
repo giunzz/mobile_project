@@ -8,8 +8,11 @@ import {
   setBackgroundMessageHandler,
 } from '@react-native-firebase/messaging';
 import App from './App';
+import { FIREBASE_MESSAGING_ENABLED } from './src/firebase/config';
 import { name as appName } from './app.json';
 
-setBackgroundMessageHandler(getMessaging(), async () => undefined);
+if (FIREBASE_MESSAGING_ENABLED) {
+  setBackgroundMessageHandler(getMessaging(), async () => undefined);
+}
 
 AppRegistry.registerComponent(appName, () => App);

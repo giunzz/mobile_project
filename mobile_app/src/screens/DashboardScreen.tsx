@@ -7,12 +7,15 @@ import { Screen } from '../components/Screen';
 import { SectionTitle } from '../components/SectionTitle';
 import { StatusBadge } from '../components/StatusBadge';
 import { useFeeder } from '../context/FeederContext';
+import { isDeviceReady } from '../firebase/deviceContract';
 import { NavigationProps } from '../navigation';
 import { colors, radii, spacing } from '../theme';
 import { findProfile, formatTimeAgo } from '../utils/format';
+import { useNow } from '../utils/useNow';
 
 export function DashboardScreen({ navigate }: NavigationProps) {
   const { snapshot, currentUser } = useFeeder();
+  const now = useNow();
   if (!snapshot) {
     return null;
   }
@@ -22,9 +25,19 @@ export function DashboardScreen({ navigate }: NavigationProps) {
     snapshot.detection.speciesId,
   );
   const lastFeeding = snapshot.history[0];
-  const nextSchedule = snapshot.schedules
+  const upcoming = snapshot.schedules
     .filter(item => item.enabled)
-    .sort((a, b) => a.time.localeCompare(b.time))[0];
+    .map(item => {
+      const date = new Date(now);
+      const [hours, minutes] = item.time.split(':').map(Number);
+      date.setHours(hours, minutes, 0, 0);
+      if (date.getTime() < now) {
+        date.setDate(date.getDate() + 1);
+      }
+      return { item, at: date.getTime() };
+    })
+    .sort((a, b) => a.at - b.at)[0];
+  const nextSchedule = upcoming?.item;
   const nextProfile = nextSchedule
     ? findProfile(snapshot.profiles, nextSchedule.speciesId)
     : undefined;
@@ -39,15 +52,26 @@ export function DashboardScreen({ navigate }: NavigationProps) {
         title="Your smart feeder"
       />
 
+      {!snapshot.connected ? (
+        <Text style={styles.warning}>
+          Firebase disconnected. Showing the last received data.
+        </Text>
+      ) : null}
+      {snapshot.warnings.map(message => (
+        <Text key={message} style={styles.warning}>
+          {message}
+        </Text>
+      ))}
+
       <Card style={styles.deviceCard}>
         <View style={styles.rowBetween}>
           <View>
-            <Text style={styles.eyebrow}>CONNECTED DEVICE</Text>
+            <Text style={styles.eyebrow}>DEVICE STATUS</Text>
             <Text style={styles.deviceName}>{snapshot.device.name}</Text>
           </View>
           <StatusBadge
-            label={snapshot.device.online ? 'Online' : 'Offline'}
-            tone={snapshot.device.online ? 'success' : 'danger'}
+            label={isDeviceReady(snapshot, now) ? 'Connected' : 'Unavailable'}
+            tone={isDeviceReady(snapshot, now) ? 'success' : 'warning'}
           />
         </View>
         <View style={styles.deviceMetrics}>
@@ -55,9 +79,9 @@ export function DashboardScreen({ navigate }: NavigationProps) {
             <Text style={styles.metricIcon}>◉</Text>
             <View>
               <Text style={styles.metricValue}>
-                {snapshot.device.foodLevelPercent}%
+                {snapshot.runtime.feeding.actualGrams ?? '—'} g
               </Text>
-              <Text style={styles.metricLabel}>Food level</Text>
+              <Text style={styles.metricLabel}>Live measured amount</Text>
             </View>
           </View>
           <View style={styles.separator} />
@@ -65,7 +89,9 @@ export function DashboardScreen({ navigate }: NavigationProps) {
             <Text style={styles.metricIcon}>⌁</Text>
             <View>
               <Text style={styles.metricValue}>
-                {snapshot.device.wifiStrengthPercent}%
+                {snapshot.device.wifiRssi === null
+                  ? '—'
+                  : `${snapshot.device.wifiRssi} dBm`}
               </Text>
               <Text style={styles.metricLabel}>Wi-Fi signal</Text>
             </View>
@@ -75,27 +101,25 @@ export function DashboardScreen({ navigate }: NavigationProps) {
           <Text style={styles.modeLabel}>SYSTEM FEEDING MODE</Text>
           <View style={styles.modePill}>
             <Text style={styles.modeValue}>
-              {snapshot.device.operatingMode === 'automatic'
-                ? 'AUTO'
-                : 'MANUAL'}
+              {snapshot.device.operatingMode.toUpperCase()}
             </Text>
           </View>
         </View>
       </Card>
 
-      <SectionTitle title="Live AI detection" />
+      <SectionTitle title="Latest AI detection" />
       <Card style={styles.detectionCard}>
         <View style={styles.detectionVisual}>
           <Text style={styles.petEmoji}>{detectedProfile?.emoji ?? '🐾'}</Text>
-          <View style={styles.scanDot} />
+          {detectedProfile ? <View style={styles.scanDot} /> : null}
         </View>
         <View style={styles.detectionCopy}>
           <Text style={styles.detectedLabel}>Detected species</Text>
           <Text style={styles.detectedName}>
-            {detectedProfile?.displayName ?? 'Unknown'}
+            {detectedProfile?.displayName ?? 'No detection yet'}
           </Text>
           <Text style={styles.foodType} numberOfLines={1}>
-            {detectedProfile?.foodType ?? 'No food profile'}
+            {detectedProfile?.foodType ?? 'Awaiting Edge AI integration'}
           </Text>
           <View style={styles.confidenceRow}>
             <View style={styles.confidenceTrack}>
@@ -111,11 +135,15 @@ export function DashboardScreen({ navigate }: NavigationProps) {
               />
             </View>
             <Text style={styles.confidenceText}>
-              {Math.round(snapshot.detection.confidence * 100)}%
+              {detectedProfile
+                ? `${Math.round(snapshot.detection.confidence * 100)}%`
+                : '—'}
             </Text>
           </View>
           <Text style={styles.updated}>
-            Updated {formatTimeAgo(snapshot.detection.capturedAt)}
+            {detectedProfile
+              ? formatTimeAgo(snapshot.detection.capturedAt)
+              : 'Firmware V1 works without AI'}
           </Text>
         </View>
       </Card>
@@ -123,10 +151,12 @@ export function DashboardScreen({ navigate }: NavigationProps) {
       <View style={styles.quickRow}>
         <Card style={styles.quickCard}>
           <Text style={styles.quickIcon}>◷</Text>
-          <Text style={styles.quickLabel}>Next feeding</Text>
+          <Text style={styles.quickLabel}>Next configured time</Text>
           <Text style={styles.quickValue}>{nextSchedule?.time ?? '—'}</Text>
           <Text style={styles.quickHint}>
-            {nextProfile?.displayName ?? 'No schedule'}
+            {nextProfile
+              ? `${nextProfile.displayName} · phone clock`
+              : 'No enabled schedule'}
           </Text>
         </Card>
         <Card style={styles.quickCard}>
@@ -148,6 +178,9 @@ export function DashboardScreen({ navigate }: NavigationProps) {
         onAction={() => navigate('history')}
         title="Recent activity"
       />
+      {!snapshot.history.length ? (
+        <Text style={styles.empty}>No firmware history received yet.</Text>
+      ) : null}
       {snapshot.history.slice(0, 3).map(item => {
         const profile = findProfile(snapshot.profiles, item.speciesId);
         return (
@@ -164,8 +197,12 @@ export function DashboardScreen({ navigate }: NavigationProps) {
                 {profile?.displayName} · {item.actualGrams} g
               </Text>
               <Text style={styles.activityMeta}>
-                {item.mode === 'automatic' ? 'Automatic' : 'Manual'} ·{' '}
-                {formatTimeAgo(item.timestamp)}
+                {item.mode === 'automatic'
+                  ? 'Automatic'
+                  : item.mode === 'manual'
+                  ? 'Manual'
+                  : 'Mode not reported'}{' '}
+                · {formatTimeAgo(item.timestamp)}
               </Text>
             </View>
             <Text
@@ -183,6 +220,8 @@ export function DashboardScreen({ navigate }: NavigationProps) {
 }
 
 const styles = StyleSheet.create({
+  warning: { color: colors.warning, lineHeight: 18, marginBottom: spacing.md },
+  empty: { color: colors.muted, marginBottom: spacing.lg },
   deviceCard: {
     backgroundColor: colors.primaryDark,
     borderColor: colors.primaryDark,

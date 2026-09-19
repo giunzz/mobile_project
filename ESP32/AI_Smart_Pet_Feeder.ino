@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <TensorFlowLite_ESP32.h>
 
 #include "app_config.h"
 #include "hardware_pins.h"
@@ -8,9 +9,11 @@
 #include "loadcell_controller.h"
 #include "firebase_client.h"
 #include "feeding_controller.h"
+#include "ai_interface.h"
 
 static uint32_t lastCommandPollMs = 0;
 static uint32_t lastHeartbeatMs = 0;
+static uint32_t lastAiScanMs = 0;
 
 static void printConsoleHelp() {
   Serial.println();
@@ -25,6 +28,7 @@ static void printConsoleHelp() {
   Serial.println("TESTDOG <grams>    : Test DOG feeder (cooldown applies)");
   Serial.println("TESTCAT <grams>    : Test CAT feeder (cooldown applies)");
   Serial.println("CAM                : Capture one diagnostic camera frame");
+  Serial.println("AITEST             : Trigger AI inference test now");
   Serial.println("=================================================");
   Serial.println();
 }
@@ -42,6 +46,14 @@ static void handleSerialConsole() {
     printConsoleHelp();
   } else if (line == "CAM") {
     cameraCaptureDiagnostic();
+  } else if (line == "AITEST") {
+    Serial.println("[CLI] Running manual AI inference...");
+    AIResult res = aiRunInference();
+    Serial.printf("[CLI] Result: species=%s, confidence=%.2f, valid=%s\n",
+                  res.speciesId.c_str(), res.confidence, res.valid ? "YES" : "NO");
+    if (res.valid && firebaseReady()) {
+      firebaseSetLatestDetection(res.speciesId, res.confidence);
+    }
   } else if (line == "TARE1" || line == "TARE2" ||
              line == "SHOWCAL" || line == "WEIGHT" ||
              line.startsWith("CAL1 ") ||
@@ -77,6 +89,11 @@ void setup() {
                 cameraOk ? "OK" : "FAIL",
                 servoOk ? "OK" : "FAIL",
                 scaleOk ? "OK" : "FAIL");
+
+#if ENABLE_AI
+  bool aiOk = aiBegin();
+  Serial.printf("[BOOT] ai=%s\n", aiOk ? "OK" : "FAIL");
+#endif
 
   firebaseBegin();
 
@@ -125,6 +142,21 @@ void loop() {
     lastCommandPollMs = now;
     feedingControllerLoop();
   }
+
+#if ENABLE_AI
+  if (now - lastAiScanMs >= AI_SCAN_INTERVAL_MS) {
+    lastAiScanMs = now;
+    AIResult aiRes = aiRunInference();
+    if (aiRes.valid && aiRes.confidence >= AI_CONFIDENCE_THRESHOLD) {
+      Serial.printf("[AI] Auto-detected %s (confidence: %.2f >= %.2f)\n",
+                    aiRes.speciesId.c_str(), aiRes.confidence, AI_CONFIDENCE_THRESHOLD);
+      if (firebaseReady()) {
+        firebaseSetLatestDetection(aiRes.speciesId, aiRes.confidence);
+      }
+      feedSpecies(aiRes.speciesId, 0.0f, "ai-" + String(millis()), "automatic");
+    }
+  }
+#endif
 
   delay(5);
 }
