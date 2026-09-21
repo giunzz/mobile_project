@@ -8,7 +8,6 @@ with open(input_file, "rb") as f:
 
 with open(output_file, "w") as f:
     f.write("#ifndef MODEL_H\n#define MODEL_H\n\n")
-    # alignas(8) cực kỳ quan trọng để ESP32-S3 không bị lỗi Memory Alignment
     f.write("alignas(8) const unsigned char model_tflite[] = {\n")
     
     for i, byte in enumerate(data):
