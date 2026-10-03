@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <TensorFlowLite_ESP32.h>
 #include <WiFi.h>
 
 #include "app_config.h"

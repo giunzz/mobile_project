@@ -255,7 +255,33 @@ small target amounts until the gate behavior has been verified.
 
 ## AI integration
 
-The current AI module returns:
+The AI backend runs the two-class CSUNet-SSR-S3 model as float32 C code
+(`csunet_model.c` and `csunet_weights.c`). It uses about 1.06 MiB of PSRAM
+workspace plus a temporary 640x480 RGB frame of about 0.88 MiB. The
+camera/Arduino adapter remains in `ai_interface.cpp`.
+
+Open the 115200-baud Serial Monitor and send `AITEST` to run one inference.
+Each `[AI-C]` line reports `capture`, `decode`, `preprocess`, `infer`, and
+`total` in milliseconds. Compare the new `infer` value with the old
+TensorFlow Lite Micro `Invoke()` baseline: median 6273 ms across 10 saved
+samples in `ESP32/logs`. `total` includes camera and preprocessing time.
+The model has only cat/dog classes; the 85% confidence cutoff returns
+`none` below the threshold but cannot guarantee an empty frame is rejected.
+
+Measured on the Freenove ESP32-S3 WROOM N8R8 after upload on 2026-10-03
+(five consecutive background frames; no accuracy test):
+
+| Measurement | Median | Samples |
+|---|---:|---:|
+| Previous TFLite Micro `Invoke()` only | 6273 ms | 10 saved log entries |
+| C model inference only | 1191.1 ms | 5 live readings |
+| C capture through result | 2653.0 ms | 5 live readings |
+
+The C inference median is about 5.3 times faster than the previous `Invoke()`
+median. The new full path includes about 235 ms decoding and 1227 ms
+preprocessing, so those stages should be kept separate when comparing models.
+
+The AI module returns:
 
 ```cpp
 speciesId = "dog"; // or "cat"

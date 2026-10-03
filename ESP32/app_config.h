@@ -12,7 +12,7 @@
 #define ENABLE_AI true
 
 // AI detection settings
-constexpr float AI_CONFIDENCE_THRESHOLD = 0.88f; // 88% threshold rejects empty background noise (~77%)
+constexpr float AI_CONFIDENCE_THRESHOLD = 0.85f; // Reject predictions below 85% confidence.
 constexpr uint32_t AI_SCAN_INTERVAL_MS = 5000;
 constexpr int AI_CONSECUTIVE_CONFIRMATIONS = 2; // Require 2 consecutive detections before auto-feed
 
