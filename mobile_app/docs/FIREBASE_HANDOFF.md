@@ -42,18 +42,18 @@ Giao diện luôn hiện lệnh mới nhất của thiết bị, kể cả khi m
 
 ## Những điểm cần thống nhất với bạn làm firmware
 
-1. **Đơn vị epoch:** tài liệu chỉ ghi tên trường. App hiện gửi `requestedAtEpoch` bằng **giây Unix** (`COMMAND_EPOCH_UNIT='seconds'` trong `src/firebase/config.ts`). Nếu firmware dùng mili giây, đổi thành `'milliseconds'`. Dữ liệu nhận vào chấp nhận số epoch giây hoặc mili giây ở thời điểm hiện nay; giá trị dưới `10^12` được hiểu là giây, số lớn hơn là mili giây. Không nhận chuỗi số; `0` là chưa báo thời gian, ngoại trừ cooldown `0` nghĩa không còn chờ.
+1. **Đơn vị epoch:** App gửi `requestedAtEpoch` bằng **giây Unix**; firmware 1.1.0 kiểm tra tuổi lệnh bằng giây. Dữ liệu nhận vào app vẫn chấp nhận số epoch giây hoặc mili giây; cooldown `0` nghĩa không còn chờ.
 2. **Heartbeat:** app mặc định yêu cầu `status.online=true`, `errorCode='none'`, `lastSeenEpoch` không quá **120 giây** và không ở tương lai quá 30 giây. Đây là ngưỡng thận trọng của app, không phải ngưỡng đã có trong hợp đồng. Firmware cần gửi heartbeat thường xuyên hơn ngưỡng này hoặc hai bên chỉnh `DEVICE_HEARTBEAT_MAX_AGE_MS`. Lúc gửi lệnh, app dùng `.info/serverTimeOffset` để bù giờ điện thoại; nhãn đếm thời gian trên giao diện vẫn dựa trên đồng hồ điện thoại.
 3. **Cooldown:** ESP32 gửi `dogUntilEpoch` / `catUntilEpoch` tương ứng từng ngăn. Thiếu hoặc sai kiểu thì app khóa gửi thủ công cho ngăn đó.
-4. **Chạy lịch:** `time` là `HH:MM`, không có ngày trong tuần/múi giờ trong contract. App hiểu đây là giờ chạy hằng ngày theo đồng hồ ESP32. Nhóm cần thống nhất múi giờ, thời điểm đặt lại bộ đếm ngày và quan hệ giữa `autoFeedEnabled` với lịch đã `enabled`. Dashboard chỉ gợi ý giờ cấu hình tiếp theo theo đồng hồ điện thoại, không xác nhận firmware đã lập lịch.
-5. **Lịch sử:** firmware sẽ tạo node nhưng chưa cung cấp schema bản ghi. Định dạng app đọc được hiện mô tả dưới đây; cần đối chiếu với một bản ghi thật để chốt.
-6. **AI:** Firmware V1 chưa yêu cầu AI. `latestDetection.speciesId='none'` nghĩa chưa có kết quả, không được hiển thị như phát hiện một con vật.
+4. **Chạy lịch:** `time` là `HH:MM` hằng ngày theo **UTC+7**. Firmware 1.1.0 chạy lịch khi lịch `enabled` và profile `autoFeedEnabled`; dấu đã chạy lưu trong NVS trước khi mở servo. Dashboard chỉ gợi ý giờ cấu hình tiếp theo, không xác nhận lịch đã chạy.
+5. **Lịch sử:** firmware hiện ghi `timestampEpoch`, `actualGrams`, `result`, `mode`, `speciesId` và `requestId`; cần đối chiếu bản ghi trên thiết bị thật sau khi nạp bản mới.
+6. **AI:** Firmware 1.1.0 có suy luận AI. `latestDetection.speciesId='none'` nghĩa chưa có kết quả hợp lệ, không được hiển thị như phát hiện một con vật.
 
 ## Kiểm tra trước lệnh và trách nhiệm firmware
 
-App kiểm tra kết nối Firebase, online/heartbeat/error, `runtime/feeding/status`, cooldown, cấu hình hợp lệ và giới hạn ngày dựa trên lịch sử đã nhận. Phần giới hạn ngày tính từ 00:00 trên điện thoại và chỉ cộng lượng đo ở bản ghi `completed` có thời gian hợp lệ. Nếu firmware chưa có lịch sử hoặc cấu trúc chưa được hỗ trợ, con số này chưa phản ánh đầy đủ ngày đó.
+App kiểm tra kết nối Firebase, online/heartbeat/error, `runtime/feeding/status`, cooldown, cấu hình hợp lệ và giới hạn ngày dựa trên lịch sử đã nhận. Ngày cho ăn tính từ **00:00 UTC+7**; app cộng lượng đo ở cả bản ghi thành công và lần thất bại có hạt đã rơi. Nếu thiếu lịch sử, con số hiển thị chưa phản ánh đầy đủ ngày đó.
 
-**ESP32 phải kiểm tra lại trước khi mở servo**: phần cứng/lỗi cảm biến, hạn mức ngày, cooldown, requestId đã xử lý, tuổi lệnh, trạng thái đang cho ăn và giới hạn vận hành của máy. Các kiểm tra runtime của app diễn ra trước transaction và không tạo khóa nguyên tử trên phần cứng. SDK có thể tiếp tục ghi một yêu cầu đang chờ khi mạng trở lại; firmware cần bỏ qua lệnh quá cũ theo ngưỡng nhóm thống nhất. Không tự chạy lại lệnh sau restart chỉ vì trạng thái vẫn pending.
+**ESP32 kiểm tra lại trước khi mở servo**: cân đã hiệu chuẩn, đồng hồ, hạn mức ngày, cooldown, tuổi lệnh tối đa 120 giây và `requestId` đã xử lý. `requestId` được lưu NVS trước khi cấp thức ăn để không chạy lại sau restart. Lệnh `processing` còn sót lại sau restart được báo `interrupted_by_restart`. Kiểm tra của app diễn ra trước transaction và không thay thế kiểm tra trên thiết bị. Xem [quy tắc firmware 1.1](../../ESP32/docs/FIREBASE_SYNC_V1_1.md).
 
 Không có ứng dụng giả lập thiết bị chạy trong bản bàn giao này. Test trong `__tests__` dùng dữ liệu giả trong bộ nhớ, không điều khiển Firebase thật hay servo.
 
@@ -109,7 +109,7 @@ Tài khoản Android Firebase đã đúng package. `google-services.json` không
 
 ## Phạm vi chưa có trong bản này
 
-- Chưa có firmware ESP32 và thiết bị thật để xác nhận servo/load cell, chạy lịch, chống cho ăn lặp và thực thi cooldown/hạn mức.
+- Mã firmware 1.1.0 đã có; vẫn cần nạp lên thiết bị và xác nhận servo/load cell, lịch, chống cho ăn lặp và hạn mức bằng kiểm thử thực tế.
 - Chưa có schema lịch sử chính thức hoặc bản ghi thực tế từ firmware mới.
 - Chưa có backend gửi FCM hay schema token của contract mới; không bật push bằng cờ cấu hình trước khi thống nhất và bổ sung tích hợp.
 - Không tự import JSON gốc, di chuyển dữ liệu cũ, thay project Firebase hay thay Rules trên server.

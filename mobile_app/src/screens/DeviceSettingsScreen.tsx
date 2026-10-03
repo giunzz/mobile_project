@@ -87,8 +87,7 @@ export function DeviceSettingsScreen({ goBack, navigate }: NavigationProps) {
         onPress={() => navigate('profiles')}
       />
       <Text style={styles.hint}>
-        AI detection is unavailable until the Edge AI integration sends results.
-        Firmware V1 can operate without AI.
+        AI detection appears when the firmware reports a valid camera result.
       </Text>
     </Screen>
   );

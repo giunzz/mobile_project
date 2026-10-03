@@ -13,7 +13,7 @@ Bản mã nguồn React Native/TypeScript đã chuyển sang cấu trúc RTDB tr
 - Dashboard, lịch sử, thống kê và thông báo trong app dùng dữ liệu nhận được. Dữ liệu chưa có được hiển thị rõ.
 - Cập nhật heartbeat không làm mất phần khẩu phần đang sửa dở.
 
-**Giới hạn cần biết:** Firmware V1 chưa có AI; app hiển thị chưa có nhận diện. Hợp đồng chưa định nghĩa cấu trúc một bản ghi `feedingHistory` và đơn vị của các trường `*Epoch`. Chi tiết và định dạng lịch sử app hiện đọc được nằm trong [hướng dẫn bàn giao](docs/FIREBASE_HANDOFF.md). Không thể xác nhận máy cho ăn thật hoạt động chỉ từ việc Firebase đã nhận lệnh.
+**Tích hợp firmware 1.1.0:** Firmware hiện có AI, lịch cho ăn và giới hạn ngày theo UTC+7. App hiển thị kết quả nhận diện khi firmware ghi `runtime/latestDetection`; lịch sử và thông báo trong app lấy từ bản ghi `feedingHistory` của thiết bị. Xem [quy tắc đồng bộ](../ESP32/docs/FIREBASE_SYNC_V1_1.md) và [hướng dẫn bàn giao](docs/FIREBASE_HANDOFF.md). Chỉ xác nhận đã lưu lệnh lên Firebase chưa chứng minh máy đã cấp thức ăn.
 
 ## Chạy trên máy Windows đã cài Android Studio
 
@@ -74,7 +74,7 @@ Mở Firebase Console → **Realtime Database → Data → devices → feeder-01
 | ESP32 gửi cân/trạng thái             | `runtime/feeding`, `status`, `runtime/cooldown`                              |
 | ESP32 lưu lịch sử                    | `feedingHistory/{pushId}`                                                    |
 
-Lịch tạo mới mặc định **tắt** để bạn kiểm tra giờ, lượng và đúng ngăn trước khi bật. App lưu cấu hình lịch; việc chạy lịch và đồng hồ do ESP32 đảm nhiệm. `autoFeedEnabled` là cờ cấu hình cho logic firmware, không phải xác nhận lịch đã được chạy.
+Lịch tạo mới mặc định **tắt** để bạn kiểm tra giờ, lượng và đúng ngăn trước khi bật. Firmware 1.1.0 chạy lịch theo UTC+7 khi lịch và `autoFeedEnabled` của loài đều bật. Xem lịch sử để xác nhận lịch thực sự đã chạy.
 
 Nếu chưa nối ESP32, bạn vẫn kiểm tra được đăng nhập, sửa cấu hình, CRUD lịch và đồng bộ giữa hai máy. Nút Feed bị khóa khi không có heartbeat hợp lệ. Không sửa giả `online`/`lastSeenEpoch` trên database đang nối thiết bị chỉ để vượt kiểm tra này. Hướng dẫn kiểm tra từng bước: [RUN_FIREBASE.md](docs/RUN_FIREBASE.md).
 

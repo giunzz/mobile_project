@@ -23,7 +23,7 @@ Hướng dẫn mở VS Code, máy ảo và hai terminal nằm trong [README](../
 
 ## 3. Thử Feed now với ESP32
 
-- Xác nhận với bạn firmware đơn vị `requestedAtEpoch`, heartbeat, múi giờ và cơ chế nhận lệnh mới.
+- Nạp firmware 1.1.0. `requestedAtEpoch` dùng giây Unix; lịch và giới hạn ngày dùng UTC+7.
 - Bật máy cho ăn. Firebase cần có `status.online=true`, `errorCode='none'`, heartbeat mới trong 120 giây; `runtime/feeding/status` là `idle` hoặc trạng thái kết thúc; cooldown của ngăn đã hết.
 - Nếu nút bị khóa, xem lý do trên màn hình Feed now và thông tin Device status. Không tạo heartbeat giả để mở khóa máy đang chạy.
 - Chọn đúng ngăn và lượng thử đã thống nhất với người vận hành → Request → xác nhận gửi.
@@ -33,8 +33,8 @@ Hướng dẫn mở VS Code, máy ảo và hai terminal nằm trong [README](../
 
 ## 4. Kiểm tra lịch chạy thật
 
-- Khi máy và đồng hồ đã sẵn sàng, tạo lịch gần thời điểm hiện tại theo múi giờ ESP32.
-- Chọn đúng ngăn, lượng; bật `enabled` và cấu hình `autoFeedEnabled` theo cách firmware đã thống nhất.
+- Khi máy và đồng hồ đã sẵn sàng, tạo lịch vài phút sau thời điểm hiện tại theo UTC+7.
+- Chọn đúng ngăn, lượng; bật cả `enabled` của lịch và `autoFeedEnabled` của loài.
 - Xác nhận ESP32 đọc config, đến giờ chạy đúng ngăn/đúng một lần và báo kết quả.
 - Chỉ việc lịch có mặt trong Firebase chưa chứng minh phần hẹn giờ của firmware hoạt động. Sau thử, tắt hoặc xóa lịch thử để tránh chạy lại ngày sau.
 
@@ -58,6 +58,6 @@ Hướng dẫn mở VS Code, máy ảo và hai terminal nằm trong [README](../
 | Firmware báo lỗi                      | Không gửi thêm lệnh cho tới khi lỗi được giải quyết                        |
 | App đóng/mở lại khi lệnh pending      | Hiện lệnh hiện có; không tự gửi lại                                        |
 | Lệnh cũ quay lại sau mất mạng/restart | ESP32 kiểm tra requestId và tuổi lệnh; không cho ăn lặp                    |
-| AI chưa tích hợp                      | App ghi chưa có nhận diện; chức năng thủ công vẫn phụ thuộc trạng thái máy |
+| `autoFeedEnabled=false`              | AI vẫn có thể báo nhận diện; firmware không tự mở servo cho loài đó       |
 
 Các mục phần cứng trong bảng cần nhóm thực hiện trên thiết bị thật; chúng chưa được xác minh bằng bộ kiểm thử JavaScript.

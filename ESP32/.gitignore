@@ -1,3 +1,5 @@
 secrets.h
 *.bin
 *.elf
+.pio/
+*.ino.cpp

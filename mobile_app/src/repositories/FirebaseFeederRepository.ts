@@ -32,6 +32,7 @@ import {
   SpeciesProfile,
 } from '../types/models';
 import { FeederRepository } from './FeederRepository';
+import { measuredTodayGrams } from '../utils/feedingDay';
 
 const asError = (error: unknown) =>
   error instanceof Error ? error : new Error(String(error));
@@ -275,17 +276,11 @@ export class FirebaseFeederRepository implements FeederRepository {
           )} seconds.`,
         );
       }
-      const dayStart = new Date(now);
-      dayStart.setHours(0, 0, 0, 0);
-      const measuredToday = snapshot.history
-        .filter(
-          item =>
-            item.speciesId === request.speciesId &&
-            item.result === 'completed' &&
-            Date.parse(item.timestamp) >= dayStart.getTime() &&
-            Date.parse(item.timestamp) <= now,
-        )
-        .reduce((sum, item) => sum + item.actualGrams, 0);
+      const measuredToday = measuredTodayGrams(
+        snapshot.history,
+        request.speciesId,
+        now,
+      );
       if (request.targetGrams + measuredToday > profile.dailyLimitGrams) {
         throw new Error(
           'This request would exceed the configured daily limit based on received history.',

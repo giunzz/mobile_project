@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FIRMWARE_VERSION "1.0.0"
+#define FIRMWARE_VERSION "1.1.0"
 #define DEVICE_ID "feeder-01"
 #define DEVICE_ROOT "/devices/" DEVICE_ID
 
@@ -12,8 +12,9 @@
 #define ENABLE_AI true
 
 // AI detection settings
-constexpr float AI_CONFIDENCE_THRESHOLD = 0.80f;
+constexpr float AI_CONFIDENCE_THRESHOLD = 0.85f; // Reject predictions below 85% confidence.
 constexpr uint32_t AI_SCAN_INTERVAL_MS = 5000;
+constexpr int AI_CONSECUTIVE_CONFIRMATIONS = 2; // Require 2 consecutive detections before auto-feed
 
 // Servo geometry
 constexpr int SERVO1_CLOSE_ANGLE = 0;
@@ -44,10 +45,17 @@ constexpr int DEFAULT_CAT_COOLDOWN_MIN = 10;
 constexpr uint32_t COMMAND_POLL_INTERVAL_MS = 1200;
 constexpr uint32_t HEARTBEAT_INTERVAL_MS = 10000;
 constexpr uint32_t WIFI_RECONNECT_INTERVAL_MS = 5000;
+constexpr uint32_t SCHEDULE_POLL_INTERVAL_MS = 20000;
+constexpr uint32_t COMMAND_MAX_AGE_SEC = 120;
+constexpr uint32_t COMMAND_FUTURE_TOLERANCE_SEC = 30;
+constexpr size_t MAX_SCHEDULES_PER_SPECIES = 32;
+constexpr size_t MAX_FIREBASE_LIST_BYTES = 16384;
 
 // NTP - epoch timestamps are UTC seconds.
 constexpr long GMT_OFFSET_SEC = 0;
 constexpr int DAYLIGHT_OFFSET_SEC = 0;
+// Feeding days and HH:MM schedules use Vietnam/Thailand time (UTC+7).
+constexpr int32_t FEEDING_UTC_OFFSET_SEC = 7 * 60 * 60;
 
 // Calibration
 constexpr float CALIBRATION_FACTOR_MIN_ABS = 1.0f;

@@ -8,6 +8,7 @@ import { SpeciesSelector } from '../components/SpeciesSelector';
 import { useFeeder } from '../context/FeederContext';
 import { colors, radii, spacing } from '../theme';
 import { SpeciesId, SpeciesProfile } from '../types/models';
+import { measuredTodayGrams } from '../utils/feedingDay';
 
 interface StepperProps {
   label: string;
@@ -84,16 +85,11 @@ export function SpeciesSettingsScreen() {
     return null;
   }
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const consumedToday = snapshot.history
-    .filter(
-      item =>
-        item.speciesId === selectedId &&
-        item.result === 'completed' &&
-        new Date(item.timestamp).getTime() >= startOfToday.getTime(),
-    )
-    .reduce((sum, item) => sum + item.actualGrams, 0);
+  const consumedToday = measuredTodayGrams(
+    snapshot.history,
+    selectedId,
+    Date.now(),
+  );
   const activeSchedules = snapshot.schedules.filter(
     item => item.speciesId === selectedId && item.enabled,
   ).length;

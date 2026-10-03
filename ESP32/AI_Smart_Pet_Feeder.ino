@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <TensorFlowLite_ESP32.h>
+#include <WiFi.h>
 
 #include "app_config.h"
 #include "hardware_pins.h"
@@ -14,6 +14,9 @@
 static uint32_t lastCommandPollMs = 0;
 static uint32_t lastHeartbeatMs = 0;
 static uint32_t lastAiScanMs = 0;
+static uint32_t lastSchedulePollMs = 0;
+static bool firebaseRuntimeInitialized = false;
+static const char *bootErrorCode = "none";
 
 static void printConsoleHelp() {
   Serial.println();
@@ -27,6 +30,7 @@ static void printConsoleHelp() {
   Serial.println("WEIGHT             : Read both load cells in grams");
   Serial.println("TESTDOG <grams>    : Test DOG feeder (cooldown applies)");
   Serial.println("TESTCAT <grams>    : Test CAT feeder (cooldown applies)");
+  Serial.println("RESETCOOLDOWN      : Clear feeding cooldowns for DOG and CAT");
   Serial.println("CAM                : Capture one diagnostic camera frame");
   Serial.println("AITEST             : Trigger AI inference test now");
   Serial.println("=================================================");
@@ -52,8 +56,10 @@ static void handleSerialConsole() {
     Serial.printf("[CLI] Result: species=%s, confidence=%.2f, valid=%s\n",
                   res.speciesId.c_str(), res.confidence, res.valid ? "YES" : "NO");
     if (res.valid && firebaseReady()) {
-      firebaseSetLatestDetection(res.speciesId, res.confidence);
+      firebaseSetLatestDetection(res.speciesId, (res.speciesId == "none") ? 0.0f : res.confidence);
     }
+  } else if (line == "RESETCOOLDOWN") {
+    feedingControllerResetCooldown();
   } else if (line == "TARE1" || line == "TARE2" ||
              line == "SHOWCAL" || line == "WEIGHT" ||
              line.startsWith("CAL1 ") ||
@@ -84,6 +90,9 @@ void setup() {
   bool cameraOk = cameraBegin();
   bool servoOk = servosBegin();
   bool scaleOk = loadCellsBegin();
+  if (!cameraOk || !servoOk || !scaleOk) {
+    bootErrorCode = "boot_partial_failure";
+  }
 
   Serial.printf("[BOOT] camera=%s servo=%s hx711=%s\n",
                 cameraOk ? "OK" : "FAIL",
@@ -105,12 +114,22 @@ void setup() {
   }
 
   if (firebaseReady()) {
-    firebaseHeartbeat(
-      (!cameraOk || !servoOk || !scaleOk) ? "boot_partial_failure" : "none");
+    firebaseHeartbeat(bootErrorCode);
+    firebaseRecoverInterruptedCommand();
     feedingControllerBegin();
+    firebaseSetLatestDetection("none", 0.0f);
+    firebaseRuntimeInitialized = true;
     Serial.println("[FIREBASE] Ready.");
   } else {
     Serial.println("[FIREBASE][WARN] Not ready yet; loop will continue retrying.");
+  }
+
+  startCameraServer();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println();
+    Serial.printf("[CAM] >>> LIVE CAMERA STREAM: http://%s/ <<<\n", WiFi.localIP().toString().c_str());
+    Serial.printf("[CAM] >>> Direct Stream URL : http://%s/stream <<<\n", WiFi.localIP().toString().c_str());
+    Serial.println();
   }
 
   printConsoleHelp();
@@ -129,12 +148,20 @@ void loop() {
   firebaseLoop();
   handleSerialConsole();
 
+  if (firebaseReady() && !firebaseRuntimeInitialized) {
+    firebaseHeartbeat(bootErrorCode);
+    firebaseRecoverInterruptedCommand();
+    feedingControllerBegin();
+    firebaseSetLatestDetection("none", 0.0f);
+    firebaseRuntimeInitialized = true;
+  }
+
   uint32_t now = millis();
 
   if (firebaseReady() &&
       now - lastHeartbeatMs >= HEARTBEAT_INTERVAL_MS) {
     lastHeartbeatMs = now;
-    firebaseHeartbeat("none");
+    firebaseHeartbeat(bootErrorCode);
   }
 
   if (firebaseReady() &&
@@ -143,17 +170,63 @@ void loop() {
     feedingControllerLoop();
   }
 
+  if (firebaseReady() &&
+      now - lastSchedulePollMs >= SCHEDULE_POLL_INTERVAL_MS) {
+    lastSchedulePollMs = now;
+    feedingScheduleLoop();
+  }
+
 #if ENABLE_AI
   if (now - lastAiScanMs >= AI_SCAN_INTERVAL_MS) {
     lastAiScanMs = now;
     AIResult aiRes = aiRunInference();
-    if (aiRes.valid && aiRes.confidence >= AI_CONFIDENCE_THRESHOLD) {
-      Serial.printf("[AI] Auto-detected %s (confidence: %.2f >= %.2f)\n",
-                    aiRes.speciesId.c_str(), aiRes.confidence, AI_CONFIDENCE_THRESHOLD);
-      if (firebaseReady()) {
-        firebaseSetLatestDetection(aiRes.speciesId, aiRes.confidence);
+
+    static String pendingSpecies = "none";
+    static int consecutiveHits = 0;
+    static String lastReportedSpecies = "none";
+
+    if (aiRes.valid && aiRes.speciesId != "none") {
+      if (aiRes.speciesId == pendingSpecies) {
+        consecutiveHits++;
+      } else {
+        pendingSpecies = aiRes.speciesId;
+        consecutiveHits = 1;
       }
-      feedSpecies(aiRes.speciesId, 0.0f, "ai-" + String(millis()), "automatic");
+
+      Serial.printf("[AI] Candidate %s (%.1f%%) | Confirmation: %d/%d\n",
+                    aiRes.speciesId.c_str(), aiRes.confidence * 100.0f,
+                    consecutiveHits, AI_CONSECUTIVE_CONFIRMATIONS);
+
+      if (consecutiveHits >= AI_CONSECUTIVE_CONFIRMATIONS) {
+        Serial.printf("[AI] >>> CONFIRMED %s! Triggering automatic feed <<<\n",
+                      aiRes.speciesId.c_str());
+        consecutiveHits = 0;
+        pendingSpecies = "none";
+
+        if (firebaseReady()) {
+          firebaseSetLatestDetection(aiRes.speciesId, aiRes.confidence);
+          lastReportedSpecies = aiRes.speciesId;
+        }
+
+        if (firebaseGetAutoFeedEnabled(aiRes.speciesId)) {
+          feedSpecies(aiRes.speciesId, 0.0f,
+                      "ai-" + String(currentEpochSeconds()) +
+                          "-" + String(millis()),
+                      "automatic");
+        }
+      }
+    } else {
+      if (consecutiveHits > 0) {
+        Serial.println("[AI] Candidate lost or below threshold. Confirmation reset.");
+      }
+      consecutiveHits = 0;
+      pendingSpecies = "none";
+
+      // Reset Firebase to 'none' once when frame is empty
+      if (lastReportedSpecies != "none" && firebaseReady()) {
+        firebaseSetLatestDetection("none", 0.0f);
+        lastReportedSpecies = "none";
+      }
     }
   }
 #endif

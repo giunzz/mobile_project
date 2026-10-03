@@ -159,7 +159,7 @@ export function ScheduleScreen() {
       />
 
       <Text style={styles.scheduleMeta}>
-        Times use the ESP32 clock. New schedules start disabled; enable them
+        Times use UTC+7. New schedules start disabled; enable them
         when ready. The firmware runs scheduled feeds.
       </Text>
 

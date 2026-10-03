@@ -15,14 +15,24 @@ void firebaseLoop();
 bool firebaseReady();
 
 bool firebaseFetchPendingCommand(FeedCommand &cmd);
-bool firebaseSetCommandStatus(const String &status,
+void firebaseRecoverInterruptedCommand(
+    const String &errorCode = "interrupted_by_restart");
+bool firebaseSetCommandStatus(const String &requestId,
+                              const String &status,
                               float actualGrams = -1.0f,
                               const String &errorCode = "none");
+bool firebaseHasPendingCommand();
 
 float firebaseGetPortionGrams(const String &speciesId, float fallback);
 int firebaseGetCooldownMinutes(const String &speciesId, int fallback);
+float firebaseGetDailyLimitGrams(const String &speciesId);
+bool firebaseGetAutoFeedEnabled(const String &speciesId);
+bool firebaseGetSchedulesJson(const String &speciesId, String &json);
+bool firebaseGetTodayMeasuredGrams(const String &speciesId,
+                                   uint64_t dayStartEpoch,
+                                   float &grams);
 
-uint64_t firebaseGetCooldownUntil(const String &speciesId);
+bool firebaseGetCooldownUntil(const String &speciesId, uint64_t &epoch);
 bool firebaseSetCooldownUntil(const String &speciesId, uint64_t epoch);
 
 bool firebaseSetFeedingRuntime(const String &status,

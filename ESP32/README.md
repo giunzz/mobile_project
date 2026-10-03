@@ -1,8 +1,10 @@
-# AI Smart Pet Feeder - ESP32-S3 CAM Firmware V1
+# AI Smart Pet Feeder - ESP32-S3 CAM Firmware 1.1.0
 
 ## Scope
 
-Firmware V1 intentionally does **not** include AI inference yet.
+Firmware 1.1.0 includes Edge AI inference and shares the Firebase RTDB
+contract with the Android app. See [Firebase sync 1.1](docs/FIREBASE_SYNC_V1_1.md)
+for the exact scheduling, limit and command behavior.
 
 Implemented:
 
@@ -22,9 +24,11 @@ Implemented:
 - Feeding history
 - Serial calibration mode
 - Camera capture diagnostic
-
-Future AI module only needs to produce `dog` or `cat` and call the same
-feeding controller.
+- MJPEG camera stream at `http://<ESP32_IP>/stream`
+- Dog/cat AI inference with confidence threshold and two-frame confirmation
+- Daily schedules from Firebase, interpreted in UTC+7
+- `autoFeedEnabled` and `dailyLimitGrams` enforced on the device
+- Expired/duplicate manual-command protection across restarts
 
 ---
 
@@ -53,6 +57,20 @@ Camera pins are in `hardware_pins.h`.
 
 For Flash Size / Partition Scheme, initially reuse the exact settings that
 were used successfully with the verified camera test.
+
+## PlatformIO in VS Code
+
+Open this `ESP32` folder itself in VS Code so PlatformIO finds `platformio.ini`.
+The configured board is **Freenove ESP32-S3 WROOM N8R8** (8 MB flash,
+8 MB OPI PSRAM). Confirm the actual board has this memory configuration
+before uploading; change the board setting if it differs. PlatformIO builds
+the source files in this folder and excludes `tests/`.
+
+Edit Wi-Fi values in `secrets.h`, then use **Project Tasks →
+freenove_esp32_s3_wroom → General → Build / Upload / Monitor**. The
+monitor baud rate is 115200. A clean PlatformIO build succeeded with
+platform `espressif32@6.11.0`; the physical board still needs an upload and
+runtime check.
 
 ---
 
@@ -235,20 +253,48 @@ small target amounts until the gate behavior has been verified.
 
 ---
 
-## AI integration later
+## AI integration
 
-The future AI module should return:
+The AI backend runs the two-class CSUNet-SSR-S3 model as float32 C code
+(`csunet_model.c` and `csunet_weights.c`). It uses about 1.06 MiB of PSRAM
+workspace plus a temporary 640x480 RGB frame of about 0.88 MiB. The
+camera/Arduino adapter remains in `ai_interface.cpp`.
+
+Open the 115200-baud Serial Monitor and send `AITEST` to run one inference.
+Each `[AI-C]` line reports `capture`, `decode`, `preprocess`, `infer`, and
+`total` in milliseconds. Compare the new `infer` value with the old
+TensorFlow Lite Micro `Invoke()` baseline: median 6273 ms across 10 saved
+samples in `ESP32/logs`. `total` includes camera and preprocessing time.
+The model has only cat/dog classes; the 85% confidence cutoff returns
+`none` below the threshold but cannot guarantee an empty frame is rejected.
+
+Measured on the Freenove ESP32-S3 WROOM N8R8 after upload on 2026-10-03
+(five consecutive background frames; no accuracy test):
+
+| Measurement | Median | Samples |
+|---|---:|---:|
+| Previous TFLite Micro `Invoke()` only | 6273 ms | 10 saved log entries |
+| C model inference only | 1191.1 ms | 5 live readings |
+| C capture through result | 2653.0 ms | 5 live readings |
+
+The C inference median is about 5.3 times faster than the previous `Invoke()`
+median. The new full path includes about 235 ms decoding and 1227 ms
+preprocessing, so those stages should be kept separate when comparing models.
+
+The AI module returns:
 
 ```cpp
 speciesId = "dog"; // or "cat"
 confidence = 0.94;
 ```
 
-Then call:
+After two matching frames, firmware calls:
 
 ```cpp
 feedSpecies(speciesId, 0, requestId, "automatic");
 ```
 
 A target of `0` makes the feeding controller obtain the portion from
-Firebase/default configuration.
+Firebase/default configuration. Automatic feeding only runs when the matching
+species profile has `autoFeedEnabled=true`. Cooldown and the daily limit are
+checked before the servo opens.

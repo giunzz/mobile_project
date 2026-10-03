@@ -1,96 +1,45 @@
+/* Arduino bridge only. All model arithmetic is compiled from .c files. */
 #include "ai_interface.h"
-#include "labels.h"
 #include "app_config.h"
+#include "csunet_model.h"
 #include "esp_camera.h"
 #include "img_converters.h"
-#include "model.h"
+#include <stdlib.h>
 
-// TensorFlow Lite for Microcontrollers headers
-#include <TensorFlowLite_ESP32.h>
-#include "tensorflow/lite/micro/all_ops_resolver.h"
-#include "tensorflow/lite/micro/micro_error_reporter.h"
-#include "tensorflow/lite/micro/micro_interpreter.h"
-#include "tensorflow/lite/schema/schema_generated.h"
+// Espressif's legacy fmt2rgb888 conversion commonly stores pixels in B,G,R
+// byte order (BMP-compatible). Set to 0 if a red/blue calibration confirms
+// your installed camera decoder returns R,G,B already.
+#ifndef AI_CAMERA_DECODE_IS_BGR
+#define AI_CAMERA_DECODE_IS_BGR 1
+#endif
 
-#include <math.h>
+// Set to 1 only if your installed img_converters.h declares this newer API.
+#ifndef AI_USE_BOUNDED_CAMERA_DECODE
+#define AI_USE_BOUNDED_CAMERA_DECODE 0
+#endif
 
 namespace {
-tflite::ErrorReporter *error_reporter = nullptr;
-const tflite::Model *tflite_model = nullptr;
-tflite::MicroInterpreter *interpreter = nullptr;
-TfLiteTensor *input_tensor = nullptr;
-TfLiteTensor *output_tensor = nullptr;
-
-// Allocate tensor arena in PSRAM if available
-constexpr int kTensorArenaSize = 180 * 1024;
-uint8_t *tensor_arena = nullptr;
-bool ai_initialized = false;
-} // namespace
+void *workspace = nullptr;
+bool initialized = false;
+bool busy = false;
+void yieldToArduino(void *) { delay(1); }
+}
 
 bool aiBegin() {
-  if (ai_initialized) return true;
-
-  Serial.println("[AI] Initializing TensorFlow Lite Micro...");
-
-  static tflite::MicroErrorReporter micro_error_reporter;
-  error_reporter = &micro_error_reporter;
-
-  tflite_model = tflite::GetModel(model_tflite);
-  if (tflite_model->version() != TFLITE_SCHEMA_VERSION) {
-    Serial.printf("[AI][ERROR] Model schema version %d != supported %d\n",
-                  tflite_model->version(), TFLITE_SCHEMA_VERSION);
+  if (initialized) return true;
+  if (!psramFound()) {
+    Serial.println("[AI-C][ERROR] Enable PSRAM. Float32 model workspace exceeds internal SRAM.");
     return false;
   }
-
-  // Allocate arena in PSRAM if available to keep internal SRAM free
-  if (psramFound()) {
-    tensor_arena = (uint8_t *)ps_malloc(kTensorArenaSize);
-    if (tensor_arena) {
-      Serial.printf("[AI] Allocated %d bytes tensor arena in PSRAM.\n", kTensorArenaSize);
-    }
-  }
-  if (!tensor_arena) {
-    tensor_arena = (uint8_t *)malloc(kTensorArenaSize);
-    if (tensor_arena) {
-      Serial.printf("[AI] Allocated %d bytes tensor arena in internal SRAM.\n", kTensorArenaSize);
-    } else {
-      Serial.println("[AI][ERROR] Failed to allocate tensor arena memory!");
-      return false;
-    }
-  }
-
-  static tflite::AllOpsResolver resolver;
-
-  static tflite::MicroInterpreter static_interpreter(
-      tflite_model, resolver, tensor_arena, kTensorArenaSize, error_reporter);
-  interpreter = &static_interpreter;
-
-  TfLiteStatus allocate_status = interpreter->AllocateTensors();
-  if (allocate_status != kTfLiteOk) {
-    Serial.println("[AI][ERROR] AllocateTensors() failed!");
+  workspace = ps_malloc(csunet_workspace_bytes());
+  if (!workspace) {
+    Serial.printf("[AI-C][ERROR] Cannot allocate %u workspace bytes in PSRAM.\n",
+                  (unsigned)csunet_workspace_bytes());
     return false;
   }
-
-  input_tensor = interpreter->input(0);
-  output_tensor = interpreter->output(0);
-
-  if (!input_tensor || !output_tensor) {
-    Serial.println("[AI][ERROR] Input or output tensor not found!");
-    return false;
-  }
-
-  Serial.printf("[AI] Model loaded successfully.\n");
-  Serial.printf("[AI] Input tensor: %d bytes, shape [%d, %d, %d, %d], type=%d\n",
-                input_tensor->bytes,
-                input_tensor->dims->data[0], input_tensor->dims->data[1],
-                input_tensor->dims->data[2], input_tensor->dims->data[3],
-                input_tensor->type);
-  Serial.printf("[AI] Output tensor: %d bytes, shape [%d, %d], type=%d\n",
-                output_tensor->bytes,
-                output_tensor->dims->data[0], output_tensor->dims->data[1],
-                output_tensor->type);
-
-  ai_initialized = true;
+  initialized = true;
+  Serial.printf("[AI-C] CSUNet-SSR-S3 ready. C float32; workspace=%u bytes.\n",
+                (unsigned)csunet_workspace_bytes());
   return true;
 }
 
@@ -99,99 +48,90 @@ AIResult aiRunInference() {
   result.speciesId = "none";
   result.confidence = 0.0f;
   result.valid = false;
+  if (!initialized || busy) return result;
+  busy = true;
+  const uint32_t total_start_us = micros();
 
-  if (!ai_initialized) {
-    Serial.println("[AI][WARN] Inference requested before aiBegin().");
-    return result;
-  }
-
-  // 1. Capture camera frame
   camera_fb_t *fb = esp_camera_fb_get();
   if (!fb) {
-    Serial.println("[AI][ERROR] Camera capture failed.");
+    Serial.println("[AI-C][ERROR] Camera capture failed.");
+    busy = false;
     return result;
   }
-
-  // 2. Decode frame into RGB888 buffer
-  size_t rgb_size = fb->width * fb->height * 3;
-  uint8_t *rgb_buf = nullptr;
-  if (psramFound()) {
-    rgb_buf = (uint8_t *)ps_malloc(rgb_size);
-  }
-  if (!rgb_buf) {
-    rgb_buf = (uint8_t *)malloc(rgb_size);
-  }
-
-  if (!rgb_buf) {
-    Serial.println("[AI][ERROR] Failed to allocate temporary RGB buffer.");
+  const uint32_t capture_end_us = micros();
+  const int width = fb->width;
+  const int height = fb->height;
+  if (width < 1 || height < 1 || width > 4096 || height > 4096) {
     esp_camera_fb_return(fb);
+    busy = false;
     return result;
   }
-
-  bool decode_ok = fmt2rgb888(fb->buf, fb->len, fb->format, rgb_buf);
-  uint16_t src_w = fb->width;
-  uint16_t src_h = fb->height;
+  const size_t rgb_bytes = (size_t)width * height * 3;
+  uint8_t *rgb = (uint8_t *)ps_malloc(rgb_bytes);
+  if (!rgb) {
+    Serial.println("[AI-C][ERROR] Cannot allocate camera RGB buffer in PSRAM.");
+    esp_camera_fb_return(fb);
+    busy = false;
+    return result;
+  }
+#if AI_USE_BOUNDED_CAMERA_DECODE
+  bool decoded = fmt2rgb888_bounded(fb->buf, fb->len, fb->format, rgb, rgb_bytes);
+#else
+  bool decoded = fmt2rgb888(fb->buf, fb->len, fb->format, rgb);
+#endif
   esp_camera_fb_return(fb);
+  if (!decoded) {
+    free(rgb);
+    busy = false;
+    Serial.println("[AI-C][ERROR] Camera decode failed.");
+    return result;
+  }
+#if AI_CAMERA_DECODE_IS_BGR
+  for (size_t i = 0; i < rgb_bytes; i += 3) {
+    uint8_t temporary = rgb[i];
+    rgb[i] = rgb[i + 2];
+    rgb[i + 2] = temporary;
+  }
+#endif
+  const uint32_t decode_end_us = micros();
 
-  if (!decode_ok) {
-    Serial.println("[AI][ERROR] fmt2rgb888 conversion failed.");
-    free(rgb_buf);
+  const CSUNetStatus preprocess_status = csunet_preprocess_rgb888(
+      rgb, rgb_bytes, width, height, (size_t)width * 3,
+      (float *)workspace, CSUNET_INPUT_FLOATS);
+  const uint32_t preprocess_end_us = micros();
+  free(rgb);
+  if (preprocess_status != CSUNET_OK) {
+    busy = false;
+    Serial.printf("[AI-C][ERROR] Preprocess status=%d\n", (int)preprocess_status);
     return result;
   }
 
-  // 3. Resize and normalize into input_tensor (128 x 128 x 3 FLOAT32 in range [0.0, 1.0])
-  float *input_data = input_tensor->data.f;
-  for (int y = 0; y < AI_INPUT_HEIGHT; ++y) {
-    int src_y = (y * src_h) / AI_INPUT_HEIGHT;
-    for (int x = 0; x < AI_INPUT_WIDTH; ++x) {
-      int src_x = (x * src_w) / AI_INPUT_WIDTH;
-
-      size_t src_idx = ((size_t)src_y * src_w + src_x) * 3;
-      size_t dst_idx = ((size_t)y * AI_INPUT_WIDTH + x) * 3;
-
-      input_data[dst_idx + 0] = (float)rgb_buf[src_idx + 0] / 255.0f; // R
-      input_data[dst_idx + 1] = (float)rgb_buf[src_idx + 1] / 255.0f; // G
-      input_data[dst_idx + 2] = (float)rgb_buf[src_idx + 2] / 255.0f; // B
-    }
-  }
-
-  free(rgb_buf);
-
-  // 4. Run model inference
-  uint32_t t_start = millis();
-  TfLiteStatus invoke_status = interpreter->Invoke();
-  uint32_t t_inference = millis() - t_start;
-
-  if (invoke_status != kTfLiteOk) {
-    Serial.println("[AI][ERROR] Interpreter Invoke() failed.");
+  CSUNetResult prediction;
+  const uint32_t infer_start_us = micros();
+  const CSUNetStatus status = csunet_predict_chw_with_hook(
+      (const float *)workspace, CSUNET_INPUT_FLOATS,
+      workspace, csunet_workspace_bytes(), &prediction, yieldToArduino, nullptr);
+  const uint32_t infer_end_us = micros();
+  busy = false;
+  if (status != CSUNET_OK) {
+    Serial.printf("[AI-C][ERROR] Inference status=%d\n", (int)status);
     return result;
   }
-
-  // 5. Read output logits and apply Softmax
-  float logit0 = output_tensor->data.f[0];
-  float logit1 = output_tensor->data.f[1];
-
-  float max_logit = fmaxf(logit0, logit1);
-  float exp0 = expf(logit0 - max_logit);
-  float exp1 = expf(logit1 - max_logit);
-  float sum_exp = exp0 + exp1;
-
-  float prob0 = exp0 / sum_exp; // Class 0 probability
-  float prob1 = exp1 / sum_exp; // Class 1 probability
-
-  Serial.printf("[AI] Inference took %u ms | %s: %.1f%%, %s: %.1f%%\n",
-                t_inference,
-                AI_CLASS_0, prob0 * 100.0f,
-                AI_CLASS_1, prob1 * 100.0f);
-
-  if (prob0 >= prob1) {
-    result.speciesId = AI_CLASS_0;
-    result.confidence = prob0;
-  } else {
-    result.speciesId = AI_CLASS_1;
-    result.confidence = prob1;
-  }
+  result.speciesId = prediction.confidence >= AI_CONFIDENCE_THRESHOLD
+                         ? csunet_class_name(prediction.class_id)
+                         : "none";
+  result.confidence = prediction.confidence;
   result.valid = true;
-
+  Serial.printf("[AI-C] capture=%.1f ms decode=%.1f ms preprocess=%.1f ms "
+                "infer=%.1f ms total=%.1f ms | cat=%.1f%% dog=%.1f%% -> %s "
+                "(threshold=%.0f%%)\n",
+                (capture_end_us - total_start_us) / 1000.0f,
+                (decode_end_us - capture_end_us) / 1000.0f,
+                (preprocess_end_us - decode_end_us) / 1000.0f,
+                (infer_end_us - infer_start_us) / 1000.0f,
+                (infer_end_us - total_start_us) / 1000.0f,
+                prediction.probabilities[0] * 100.0f,
+                prediction.probabilities[1] * 100.0f,
+                result.speciesId.c_str(), AI_CONFIDENCE_THRESHOLD * 100.0f);
   return result;
 }

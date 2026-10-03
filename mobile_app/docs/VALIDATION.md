@@ -1,5 +1,27 @@
 # Kết quả kiểm tra bản Firebase v4 (app 1.1.0)
 
+## Kiểm tra lại ngày 26/09/2026
+
+Sau khi đồng bộ firmware 1.1.0 và logic giới hạn ngày UTC+7:
+
+| Kiểm tra | Kết quả |
+| --- | --- |
+| `npm run typecheck` | Qua |
+| `npm run lint` | Qua |
+| `npm test -- --runInBand` | 40 test qua, 4 suites |
+| Bộ kiểm tra logic lịch/lịch sử firmware bằng C++ | Qua |
+| Kiểm tra cú pháp `feeding_controller.cpp` với Arduino stubs | Qua |
+| Android `assembleDebug` | Chưa tạo APK: biên dịch native của React Native gặp giới hạn đường dẫn 260 ký tự trên Windows tại `react-native-safe-area-context` |
+| Arduino build / nạp ESP32 / Firebase thật | Chưa thực hiện trong lượt này |
+
+Các kiểm tra C++ chạy trên máy tính, không thay thế biên dịch bằng Arduino IDE
+và kiểm thử servo/load cell trên thiết bị. Phần dưới là kết quả của bản bàn giao
+trước khi thêm logic firmware 1.1.0.
+
+Android SDK và NDK 27.1.12297006 đã có trên máy. Thử build trực tiếp đi qua
+các bước Java/Kotlin rồi dừng tại Ninja vì đường dẫn đối tượng C++ quá dài.
+Không thay đổi kiến trúc React Native của dự án để né lỗi môi trường này.
+
 ## Đã thực hiện
 
 | Kiểm tra | Kết quả |

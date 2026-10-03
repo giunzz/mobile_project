@@ -232,8 +232,7 @@ export function mapDevice(
     const result = wire.result ?? wire.status;
     const actual = finite(wire.actualGrams);
     const target = finite(wire.targetGrams);
-    // V1 does not define history fields. See the proposed adapter format in
-    // docs/FIREBASE_HANDOFF.md. Never invent successful records.
+    // Keep invalid history out of totals; never invent successful records.
     if (
       !isSpecies(wire.speciesId) ||
       actual === null ||
@@ -333,7 +332,7 @@ export function mapDevice(
       firmwareVersion: text(status.firmwareVersion, 'Unknown'),
       ipAddress: text(status.ipAddress),
       errorCode: text(status.errorCode, 'unknown'),
-      aiModelName: 'Not supplied by firmware V1',
+      aiModelName: 'Not reported by firmware',
       operatingMode:
         status.operatingMode === 'manual' ||
         status.operatingMode === 'automatic'

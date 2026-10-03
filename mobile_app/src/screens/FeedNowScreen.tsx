@@ -12,6 +12,7 @@ import { colors, radii, spacing } from '../theme';
 import { SpeciesId } from '../types/models';
 import { formatDateTime } from '../utils/format';
 import { useNow } from '../utils/useNow';
+import { measuredTodayGrams } from '../utils/feedingDay';
 
 export function FeedNowScreen() {
   const { snapshot, feedNow } = useFeeder();
@@ -34,17 +35,7 @@ export function FeedNowScreen() {
   const cooldown = snapshot.runtime.cooldownUntilMs[selectedId];
   const secondsLeft =
     cooldown === null ? null : Math.max(0, Math.ceil((cooldown - now) / 1000));
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  const measuredToday = snapshot.history
-    .filter(
-      item =>
-        item.speciesId === selectedId &&
-        item.result === 'completed' &&
-        Date.parse(item.timestamp) >= start.getTime() &&
-        Date.parse(item.timestamp) <= now,
-    )
-    .reduce((sum, item) => sum + item.actualGrams, 0);
+  const measuredToday = measuredTodayGrams(snapshot.history, selectedId, now);
   const blocked = !isDeviceReady(snapshot, now)
     ? 'Waiting for a recent, healthy feeder heartbeat'
     : inFlight

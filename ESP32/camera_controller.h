@@ -3,3 +3,4 @@
 
 bool cameraBegin();
 bool cameraCaptureDiagnostic();
+bool startCameraServer();

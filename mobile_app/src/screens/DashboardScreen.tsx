@@ -12,6 +12,7 @@ import { NavigationProps } from '../navigation';
 import { colors, radii, spacing } from '../theme';
 import { findProfile, formatTimeAgo } from '../utils/format';
 import { useNow } from '../utils/useNow';
+import { nextScheduleAtMs } from '../utils/feedingDay';
 
 export function DashboardScreen({ navigate }: NavigationProps) {
   const { snapshot, currentUser } = useFeeder();
@@ -26,16 +27,13 @@ export function DashboardScreen({ navigate }: NavigationProps) {
   );
   const lastFeeding = snapshot.history[0];
   const upcoming = snapshot.schedules
-    .filter(item => item.enabled)
-    .map(item => {
-      const date = new Date(now);
-      const [hours, minutes] = item.time.split(':').map(Number);
-      date.setHours(hours, minutes, 0, 0);
-      if (date.getTime() < now) {
-        date.setDate(date.getDate() + 1);
-      }
-      return { item, at: date.getTime() };
-    })
+    .filter(
+      item =>
+        item.enabled &&
+        snapshot.profiles.find(profile => profile.id === item.speciesId)
+          ?.autoFeedEnabled,
+    )
+    .map(item => ({ item, at: nextScheduleAtMs(now, item.time) }))
     .sort((a, b) => a.at - b.at)[0];
   const nextSchedule = upcoming?.item;
   const nextProfile = nextSchedule
@@ -119,7 +117,7 @@ export function DashboardScreen({ navigate }: NavigationProps) {
             {detectedProfile?.displayName ?? 'No detection yet'}
           </Text>
           <Text style={styles.foodType} numberOfLines={1}>
-            {detectedProfile?.foodType ?? 'Awaiting Edge AI integration'}
+            {detectedProfile?.foodType ?? 'No pet detected'}
           </Text>
           <View style={styles.confidenceRow}>
             <View style={styles.confidenceTrack}>
@@ -143,7 +141,7 @@ export function DashboardScreen({ navigate }: NavigationProps) {
           <Text style={styles.updated}>
             {detectedProfile
               ? formatTimeAgo(snapshot.detection.capturedAt)
-              : 'Firmware V1 works without AI'}
+              : 'Waiting for a valid camera detection'}
           </Text>
         </View>
       </Card>
@@ -151,12 +149,12 @@ export function DashboardScreen({ navigate }: NavigationProps) {
       <View style={styles.quickRow}>
         <Card style={styles.quickCard}>
           <Text style={styles.quickIcon}>◷</Text>
-          <Text style={styles.quickLabel}>Next configured time</Text>
+          <Text style={styles.quickLabel}>Next active schedule</Text>
           <Text style={styles.quickValue}>{nextSchedule?.time ?? '—'}</Text>
           <Text style={styles.quickHint}>
             {nextProfile
-              ? `${nextProfile.displayName} · phone clock`
-              : 'No enabled schedule'}
+              ? `${nextProfile.displayName} · UTC+7`
+              : 'No active schedule'}
           </Text>
         </Card>
         <Card style={styles.quickCard}>
