@@ -1,66 +1,63 @@
-# Chạy và kiểm tra Firebase thật
+# Chạy và kiểm tra với Firebase mới
 
-## 1. Kiểm tra Firebase Console
+Hướng dẫn mở VS Code, máy ảo và hai terminal nằm trong [README](../README.md). Thực hiện trên database/thiết bị mà nhóm dùng để kiểm thử. Các kiểm thử tự động của bản mã nguồn không gửi lệnh đến Firebase thật.
 
-1. **Authentication → Sign-in method**: Email/Password phải ở trạng thái Enabled.
-2. **Realtime Database → Rules**: dùng nội dung trong `database.rules.json`, sau đó nhấn Publish.
-3. Android app trong Project settings phải có package `com.aismartpetfeeder`.
+## 1. Đăng nhập và đọc dữ liệu
 
-## 2. Chạy trên Windows
+- Mở Firebase Console của `ai-smart-pet-feeder` → Realtime Database → Data.
+- Mở `devices/feeder-01` và kiểm tra đã có `config`, `status`, `runtime`, `command` như contract.
+- Trong app, đăng nhập tài khoản được cấp quyền. Dashboard phải hiện hai ngăn Dog/Cat.
+- Nếu `permission-denied`: chủ Firebase kiểm tra quyền tài khoản đó. Tạo tài khoản không tự cấp quyền thiết bị. Sau khi sửa quyền, bấm **Try again** để đăng ký lại listener.
+- Nếu thiếu `config`: nhờ bạn Firebase đối chiếu và bổ sung phần thiếu theo contract; không import đè toàn bộ JSON mẫu lên dữ liệu đang chạy.
 
-Mở Pixel 6 AVD trước. Tại thư mục project:
+## 2. Thử đọc/ghi cấu hình, chưa cần ESP32
 
-```powershell
-npm install
-adb reverse tcp:8081 tcp:8081
-npm start -- --reset-cache
-```
+- Profiles → Dog → ghi nhớ cooldown ban đầu → tăng 1 phút → Save.
+- Firebase phải đổi đúng `config/speciesProfiles/dog/cooldownMinutes`. Cat không đổi.
+- Khôi phục giá trị cooldown ban đầu và Save.
+- Schedule → Add → chọn Cat → đặt giờ và lượng hợp lệ → Create. Lịch mới mặc định tắt.
+- Firebase xuất hiện `config/schedules/cat/{key}` với đúng ba trường `time`, `portionGrams`, `enabled`.
+- Sửa giờ; Firebase cập nhật cùng key. Xóa lịch vừa thử; đúng child đó biến mất.
+- Nếu Dog và Cat cùng có `schedule-01`, sửa/xóa Dog không được ảnh hưởng Cat.
+- Mở app trên máy khác bằng tài khoản được cấp quyền: thay đổi config phải đồng bộ. Không tìm lịch mới dưới `users/{uid}` nữa.
 
-Giữ Metro chạy. Mở terminal thứ hai:
+## 3. Thử Feed now với ESP32
 
-```powershell
-cd android
-.\gradlew clean
-cd ..
-npm run android
-```
+- Nạp firmware 1.1.0. `requestedAtEpoch` dùng giây Unix; lịch và giới hạn ngày dùng UTC+7.
+- Bật máy cho ăn. Firebase cần có `status.online=true`, `errorCode='none'`, heartbeat mới trong 120 giây; `runtime/feeding/status` là `idle` hoặc trạng thái kết thúc; cooldown của ngăn đã hết.
+- Nếu nút bị khóa, xem lý do trên màn hình Feed now và thông tin Device status. Không tạo heartbeat giả để mở khóa máy đang chạy.
+- Chọn đúng ngăn và lượng thử đã thống nhất với người vận hành → Request → xác nhận gửi.
+- Quan sát `command`: app tạo requestId mới và trạng thái `pending`. ESP32 phải chuyển `processing`, rồi `completed`/`failed` mà giữ requestId.
+- App phải hiện cùng trạng thái. Lượng cân trực tiếp ở `runtime/feeding` phải tương ứng ngăn đang chạy.
+- Lệnh chờ lâu không tự gửi lại. Kiểm tra log/kết nối ESP32 và requestId; không đổi thủ công `pending` thành `completed` rồi gọi đó là thử phần cứng thành công.
 
-Nếu CLI hỏi dùng port 8082 vì 8081 đã chạy, chọn **No**.
+## 4. Kiểm tra lịch chạy thật
 
-## 3. Tạo tài khoản và kiểm tra dữ liệu
+- Khi máy và đồng hồ đã sẵn sàng, tạo lịch vài phút sau thời điểm hiện tại theo UTC+7.
+- Chọn đúng ngăn, lượng; bật cả `enabled` của lịch và `autoFeedEnabled` của loài.
+- Xác nhận ESP32 đọc config, đến giờ chạy đúng ngăn/đúng một lần và báo kết quả.
+- Chỉ việc lịch có mặt trong Firebase chưa chứng minh phần hẹn giờ của firmware hoạt động. Sau thử, tắt hoặc xóa lịch thử để tránh chạy lại ngày sau.
 
-1. Nhập email hợp lệ và mật khẩu từ 6 ký tự.
-2. Nhấn **Create Firebase account**. Lần sau dùng **Sign in**.
-3. Trong Console mở **Authentication → Users**: tài khoản vừa tạo phải xuất hiện.
-4. Mở **Realtime Database → Data**. App tự tạo:
+## 5. Lịch sử, thống kê và thông báo
 
-```text
-users/{uid}/profile
-users/{uid}/species_profiles
-users/{uid}/feeding_schedules
-users/{uid}/notifications
-users/{uid}/fcm_tokens
-devices/feeder-01/status
-devices/feeder-01/latest_detection
-devices/feeder-01/feeding_history
-```
+- Sau khi ESP32 hoàn tất, kiểm tra node **`feedingHistory`** (chữ H hoa), không phải node `feeding_history` của bản cũ.
+- Đối chiếu record thực tế với [định dạng adapter](FIREBASE_HANDOFF.md#định-dạng-lịch-sử-adapter-hiện-hỗ-trợ).
+- Màn History hiển thị lượng đo thật; Statistics chỉ tính bản ghi có thời gian hợp lệ. Bản ghi thiếu `mode` hiện Unknown.
+- Feed screen chỉ liên kết lượng thực tế vào lệnh khi history có `requestId` khớp.
+- Notifications hiển thị kết quả trong app nếu profile bật thông báo. Không phải thông báo đẩy khi app tắt; dấu đã đọc không đồng bộ giữa các điện thoại.
+- Nếu `feedingHistory` chưa được firmware tạo hoặc dùng trường chưa hỗ trợ, màn hình rỗng/cảnh báo là đúng. Gửi một bản ghi thật cho người sửa adapter; không chèn lịch sử giả vào database để chứng minh thiết bị đã cho ăn.
 
-## 4. Demo đồng bộ realtime
+## 6. Tình huống cần nhóm kiểm tra trước buổi demo
 
-- **Profiles → Save profile**: kiểm tra `users/{uid}/species_profiles/{speciesId}`.
-- **Schedule → Add**: kiểm tra `users/{uid}/feeding_schedules`.
-- **Feed now → Dispense**: theo dõi `devices/feeder-01/feeding_commands`; trạng thái lần lượt là `pending`, `processing`, `completed`.
-- Sau Feed Now: kiểm tra bản ghi mới trong `feeding_history` và `users/{uid}/notifications`.
-- Sửa một trường trực tiếp trong Firebase Console, ví dụ `foodLevelPercent`; Dashboard trên app sẽ đổi realtime.
+| Tình huống                            | Kết quả mong đợi                                                           |
+| ------------------------------------- | -------------------------------------------------------------------------- |
+| Rút mạng ESP32                        | Heartbeat cũ quá ngưỡng hoặc online=false; app khóa yêu cầu mới            |
+| App mất mạng                          | Hiện ngắt kết nối; không chủ động cho gửi yêu cầu mới                      |
+| Hai điện thoại gửi đồng thời          | Một lệnh giành được slot; lệnh còn lại bị từ chối vì bận                   |
+| Đang cooldown Dog                     | Dog bị khóa, Cat vẫn theo cooldown riêng                                   |
+| Firmware báo lỗi                      | Không gửi thêm lệnh cho tới khi lỗi được giải quyết                        |
+| App đóng/mở lại khi lệnh pending      | Hiện lệnh hiện có; không tự gửi lại                                        |
+| Lệnh cũ quay lại sau mất mạng/restart | ESP32 kiểm tra requestId và tuổi lệnh; không cho ăn lặp                    |
+| `autoFeedEnabled=false`              | AI vẫn có thể báo nhận diện; firmware không tự mở servo cho loài đó       |
 
-## 5. Ghép ESP32 thật
-
-Trong `src/firebase/config.ts`, đổi:
-
-```ts
-export const DEMO_DEVICE_SIMULATOR_ENABLED = false;
-```
-
-ESP32 phải theo dõi `devices/feeder-01/feeding_commands`, xử lý command `pending`, cập nhật `processing` rồi `completed`/`failed`, đồng thời tạo history và notification. App sẽ chờ tối đa 30 giây cho phản hồi.
-
-FCM token đã được lưu trong `users/{uid}/fcm_tokens`. Để gửi push khi app chạy nền, Cloud Function hoặc backend tin cậy phải gửi FCM; không đặt server key trong app hay ESP32.
+Các mục phần cứng trong bảng cần nhóm thực hiện trên thiết bị thật; chúng chưa được xác minh bằng bộ kiểm thử JavaScript.

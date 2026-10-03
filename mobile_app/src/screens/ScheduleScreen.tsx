@@ -80,7 +80,7 @@ export function ScheduleScreen() {
       time,
       portionGrams: parsedPortion,
       repeatLabel: original?.repeatLabel ?? 'Every day',
-      enabled: original?.enabled ?? true,
+      enabled: original?.enabled ?? false,
     };
     try {
       if (editingId) {
@@ -154,9 +154,14 @@ export function ScheduleScreen() {
             beginAdd();
           }
         }}
-        subtitle="Automatic feeding times"
+        subtitle="Shared schedules for the dog and cat feeders"
         title="Schedule"
       />
+
+      <Text style={styles.scheduleMeta}>
+        Times use UTC+7. New schedules start disabled; enable them
+        when ready. The firmware runs scheduled feeds.
+      </Text>
 
       {adding ? (
         <Card style={styles.addCard}>
@@ -164,15 +169,22 @@ export function ScheduleScreen() {
             {editingId ? 'Edit feeding schedule' : 'New feeding schedule'}
           </Text>
           <Text style={styles.fieldLabel}>Species profile</Text>
-          <SpeciesSelector
-            onSelect={id => {
-              setSelectedId(id);
-              const profile = findProfile(snapshot.profiles, id);
-              setPortion(String(profile?.portionGrams ?? 45));
-            }}
-            profiles={snapshot.profiles}
-            selectedId={selectedId}
-          />
+          {editingId ? (
+            <Text style={styles.fieldLabel}>
+              {selectedId.toUpperCase()} ·{' '}
+              {selectedId === 'dog' ? 'Feeder 1' : 'Feeder 2'} (fixed)
+            </Text>
+          ) : (
+            <SpeciesSelector
+              onSelect={id => {
+                setSelectedId(id);
+                const profile = findProfile(snapshot.profiles, id);
+                setPortion(String(profile?.portionGrams ?? 45));
+              }}
+              profiles={snapshot.profiles}
+              selectedId={selectedId}
+            />
+          )}
           <View style={styles.fieldsRow}>
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Time (24h)</Text>
@@ -202,6 +214,7 @@ export function ScheduleScreen() {
             <Text style={styles.repeatValue}>Every day</Text>
           </View>
           <PrimaryButton
+            disabled={!snapshot.connected}
             label={editingId ? 'Save changes' : 'Create schedule'}
             loading={saving}
             onPress={createSchedule}
@@ -219,7 +232,7 @@ export function ScheduleScreen() {
           <Text style={styles.summaryValue}>
             {snapshot.schedules.filter(item => item.enabled).length}
           </Text>
-          <Text style={styles.summaryLabel}>Currently active</Text>
+          <Text style={styles.summaryLabel}>Enabled in Firebase</Text>
         </View>
       </View>
 
@@ -249,6 +262,7 @@ export function ScheduleScreen() {
                   </Text>
                 </View>
                 <Switch
+                  disabled={!snapshot.connected}
                   onValueChange={enabled =>
                     changeScheduleState(schedule.id, enabled)
                   }

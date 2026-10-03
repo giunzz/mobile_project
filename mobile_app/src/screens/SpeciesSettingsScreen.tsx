@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Switch, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Card } from '../components/Card';
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -8,6 +8,7 @@ import { SpeciesSelector } from '../components/SpeciesSelector';
 import { useFeeder } from '../context/FeederContext';
 import { colors, radii, spacing } from '../theme';
 import { SpeciesId, SpeciesProfile } from '../types/models';
+import { measuredTodayGrams } from '../utils/feedingDay';
 
 interface StepperProps {
   label: string;
@@ -60,9 +61,14 @@ function Stepper({
 export function SpeciesSettingsScreen() {
   const { snapshot, updateProfile } = useFeeder();
   const [selectedId, setSelectedId] = useState<SpeciesId>('cat');
-  const selected = useMemo(
-    () => snapshot?.profiles.find(item => item.id === selectedId),
-    [selectedId, snapshot?.profiles],
+  // Runtime heartbeats rebuild snapshots; do not reset an unsaved profile
+  // unless the selected profile itself has changed.
+  const selectedJson = JSON.stringify(
+    snapshot?.profiles.find(item => item.id === selectedId) ?? null,
+  );
+  const selected = useMemo<SpeciesProfile | null>(
+    () => JSON.parse(selectedJson),
+    [selectedJson],
   );
   const [draft, setDraft] = useState<SpeciesProfile | null>(selected ?? null);
   const [saving, setSaving] = useState(false);
@@ -79,16 +85,11 @@ export function SpeciesSettingsScreen() {
     return null;
   }
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const consumedToday = snapshot.history
-    .filter(
-      item =>
-        item.speciesId === selectedId &&
-        item.result === 'completed' &&
-        new Date(item.timestamp).getTime() >= startOfToday.getTime(),
-    )
-    .reduce((sum, item) => sum + item.actualGrams, 0);
+  const consumedToday = measuredTodayGrams(
+    snapshot.history,
+    selectedId,
+    Date.now(),
+  );
   const activeSchedules = snapshot.schedules.filter(
     item => item.speciesId === selectedId && item.enabled,
   ).length;
@@ -112,11 +113,15 @@ export function SpeciesSettingsScreen() {
   return (
     <Screen>
       <AppHeader
-        subtitle="Set safe portions for each detected species"
+        subtitle="Configure the dog and cat feeders"
         title="Species profiles"
       />
       <SpeciesSelector
-        onSelect={setSelectedId}
+        onSelect={id => {
+          if (!saving) {
+            setSelectedId(id);
+          }
+        }}
         profiles={snapshot.profiles}
         selectedId={selectedId}
       />
@@ -137,13 +142,7 @@ export function SpeciesSettingsScreen() {
         <Text style={styles.settingHint}>
           Food stored in the dispenser for this species
         </Text>
-        <TextInput
-          onChangeText={foodType => setDraft({ ...draft, foodType })}
-          placeholder="Example: Adult cat dry food"
-          placeholderTextColor={colors.muted}
-          style={styles.foodInput}
-          value={draft.foodType}
-        />
+        <Text style={styles.foodInput}>{draft.foodType}</Text>
         <View style={styles.thinDivider} />
         <Stepper
           hint="Amount dispensed per feeding"
@@ -157,7 +156,7 @@ export function SpeciesSettingsScreen() {
         />
         <View style={styles.thinDivider} />
         <Stepper
-          hint="Maximum food allowed in 24 hours"
+          hint="Daily cap enforced by firmware"
           label="Daily limit"
           max={600}
           min={20}
@@ -168,11 +167,23 @@ export function SpeciesSettingsScreen() {
         />
         <View style={styles.thinDivider} />
 
+        <Stepper
+          hint="Minimum wait between feeds for this species"
+          label="Cooldown"
+          max={1440}
+          min={0}
+          step={1}
+          unit="min"
+          value={draft.cooldownMinutes}
+          onChange={cooldownMinutes => setDraft({ ...draft, cooldownMinutes })}
+        />
+        <View style={styles.thinDivider} />
+
         <View style={styles.settingRow}>
           <View style={styles.settingCopy}>
             <Text style={styles.settingLabel}>Automatic feeding</Text>
             <Text style={styles.settingHint}>
-              Allow schedules after AI recognizes this species
+              Allow the firmware's automatic feeding logic
             </Text>
           </View>
           <Switch
@@ -189,7 +200,7 @@ export function SpeciesSettingsScreen() {
           <View style={styles.settingCopy}>
             <Text style={styles.settingLabel}>Notifications</Text>
             <Text style={styles.settingHint}>
-              Receive success, failure and safety alerts
+              Show reported feeding results in the app
             </Text>
           </View>
           <Switch
@@ -208,28 +219,29 @@ export function SpeciesSettingsScreen() {
           <Text style={styles.usageValue}>
             {consumedToday}/{draft.dailyLimitGrams} g
           </Text>
-          <Text style={styles.usageLabel}>Consumed today</Text>
+          <Text style={styles.usageLabel}>Recorded today</Text>
         </View>
         <View style={styles.usageDivider} />
         <View>
           <Text style={styles.usageValue}>{activeSchedules}</Text>
-          <Text style={styles.usageLabel}>Active schedules</Text>
+          <Text style={styles.usageLabel}>Enabled schedules</Text>
         </View>
       </View>
 
       {saved ? (
-        <Text style={styles.saved}>✓ Profile saved successfully</Text>
+        <Text style={styles.saved}>✓ Configuration saved to Firebase</Text>
       ) : null}
       {saveError ? <Text style={styles.saveError}>{saveError}</Text> : null}
       <PrimaryButton
-        disabled={!draft.foodType.trim()}
+        disabled={!snapshot.connected}
         label="Save profile"
         loading={saving}
         onPress={save}
       />
       <Text style={styles.disclaimer}>
-        Suggested amounts are demo values. Actual portions should be confirmed
-        with a veterinarian.
+        Settings are shared with everyone using this feeder. The ESP32 applies
+        them; saving alone does not confirm the hardware has received them. Push
+        notifications are not enabled in this version.
       </Text>
     </Screen>
   );

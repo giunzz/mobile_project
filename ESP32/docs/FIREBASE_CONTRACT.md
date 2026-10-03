@@ -1,5 +1,9 @@
 # Firebase RTDB Contract - Firmware V1
 
+This is the original V1 contract. Firmware 1.1.0 adds AI, scheduled feeds,
+daily-limit enforcement and restart protection; see
+[Firebase sync 1.1](FIREBASE_SYNC_V1_1.md).
+
 Root:
 
 ```text

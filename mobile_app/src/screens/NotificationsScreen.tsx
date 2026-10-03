@@ -44,6 +44,10 @@ export function NotificationsScreen({ goBack }: NavigationProps) {
         subtitle={`${unread} unread alert${unread === 1 ? '' : 's'}`}
         title="Notifications"
       />
+      <Text style={styles.emptyText}>
+        In-app results from firmware. Read marks last for this sign-in session;
+        background push is not enabled.
+      </Text>
       {snapshot.notifications.map(item => (
         <Card
           key={item.id}
@@ -69,7 +73,8 @@ export function NotificationsScreen({ goBack }: NavigationProps) {
           <Text style={styles.emptyIcon}>🔔</Text>
           <Text style={styles.emptyTitle}>You're all caught up</Text>
           <Text style={styles.emptyText}>
-            New device alerts will appear here.
+            Reported feeding results will appear here when notifications are
+            enabled for that species.
           </Text>
         </View>
       ) : null}

@@ -3,11 +3,13 @@
 
 #include "firebase_client.h"
 #include "app_config.h"
+#include "contract_logic.h"
 #include "secrets.h"
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <FirebaseClient.h>
+#include <math.h>
 #include <time.h>
 
 static WiFiClientSecure sslClient;
@@ -64,6 +66,11 @@ static float dbGetFloat(const String &path, float fallback = 0.0f) {
   return dbOk() ? value : fallback;
 }
 
+static bool dbGetBool(const String &path, bool fallback = false) {
+  bool value = Database.get<bool>(aClient, path);
+  return dbOk() ? value : fallback;
+}
+
 static uint64_t dbGetUInt64(const String &path, uint64_t fallback = 0) {
   double value = Database.get<double>(aClient, path);
   return dbOk() ? (uint64_t)value : fallback;
@@ -111,17 +118,15 @@ bool firebaseBegin() {
 
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[WIFI][ERROR] Connection timeout. Firmware will retry in loop().");
-    return false;
+  } else {
+    Serial.printf("[WIFI] Connected. IP=%s RSSI=%d dBm\n",
+                  WiFi.localIP().toString().c_str(), WiFi.RSSI());
   }
-
-  Serial.printf("[WIFI] Connected. IP=%s RSSI=%d dBm\n",
-                WiFi.localIP().toString().c_str(), WiFi.RSSI());
 
   configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC,
              "pool.ntp.org", "time.nist.gov");
 
   sslClient.setInsecure();
-  sslClient.setConnectionTimeout(1200);
   sslClient.setHandshakeTimeout(5);
 
   initializeApp(aClient, fbApp, getAuth(userAuth),
@@ -180,12 +185,25 @@ bool firebaseFetchPendingCommand(FeedCommand &cmd) {
   return cmd.type == "feed_now";
 }
 
-bool firebaseSetCommandStatus(const String &status,
+void firebaseRecoverInterruptedCommand(const String &errorCode) {
+  if (!firebaseReady()) return;
+  const String base = pathOf("/command");
+  if (dbGetString(base + "/status", "") != "processing") return;
+  const String requestId = dbGetString(base + "/requestId", "");
+  if (requestId.length() > 0) {
+    firebaseSetCommandStatus(requestId, "failed", -1.0f, errorCode);
+  }
+}
+
+bool firebaseSetCommandStatus(const String &requestId,
+                              const String &status,
                               float actualGrams,
                               const String &errorCode) {
-  if (!firebaseReady()) return false;
+  if (!firebaseReady() || requestId.length() == 0) return false;
 
   String base = pathOf("/command");
+  // Automatic and serial feeds must never acknowledge a manual command.
+  if (dbGetString(base + "/requestId", "") != requestId) return false;
   bool ok = dbSetString(base + "/status", status);
   ok &= dbSetString(base + "/errorCode", errorCode);
 
@@ -199,6 +217,12 @@ bool firebaseSetCommandStatus(const String &status,
   }
 
   return ok;
+}
+
+bool firebaseHasPendingCommand() {
+  if (!firebaseReady()) return true;
+  const String status = dbGetString(pathOf("/command/status"), "pending");
+  return status == "pending" || status == "processing";
 }
 
 float firebaseGetPortionGrams(const String &speciesId, float fallback) {
@@ -217,11 +241,58 @@ int firebaseGetCooldownMinutes(const String &speciesId, int fallback) {
   return value >= 0 ? value : fallback;
 }
 
-uint64_t firebaseGetCooldownUntil(const String &speciesId) {
-  if (!firebaseReady()) return 0;
+float firebaseGetDailyLimitGrams(const String &speciesId) {
+  if (!firebaseReady()) return 0.0f;
+  const float value = Database.get<float>(
+      aClient,
+      pathOf("/config/speciesProfiles/" + speciesId + "/dailyLimitGrams"));
+  if (!dbOk()) return 0.0f;
+  return isfinite(value) && value > 0.0f ? value : 0.0f;
+}
+
+bool firebaseGetAutoFeedEnabled(const String &speciesId) {
+  if (!firebaseReady()) return false;
+  return dbGetBool(pathOf("/config/speciesProfiles/" + speciesId +
+                          "/autoFeedEnabled"), false);
+}
+
+bool firebaseGetSchedulesJson(const String &speciesId, String &json) {
+  if (!firebaseReady()) return false;
+  json = Database.get<String>(
+      aClient, pathOf("/config/schedules/" + speciesId));
+  return dbOk() && json.length() <= MAX_FIREBASE_LIST_BYTES;
+}
+
+bool firebaseGetTodayMeasuredGrams(const String &speciesId,
+                                   uint64_t dayStartEpoch,
+                                   float &grams) {
+  grams = 0.0f;
+  if (!firebaseReady() || dayStartEpoch == 0) return false;
+  DatabaseOptions options;
+  options.filter.orderBy("timestampEpoch");
+  options.filter.startAt(static_cast<double>(dayStartEpoch));
+  options.filter.endAt(static_cast<double>(dayStartEpoch + 86399));
+  String history = Database.get<String>(
+      aClient, pathOf("/feedingHistory"), options);
+  if (!dbOk() || history.length() > MAX_FIREBASE_LIST_BYTES) return false;
+  double total = 0;
+  if (!sumContractHistoryForDay(history.c_str(), speciesId.c_str(),
+                                dayStartEpoch, dayStartEpoch + 86400,
+                                total)) return false;
+  grams = static_cast<float>(total);
+  return isfinite(grams);
+}
+
+bool firebaseGetCooldownUntil(const String &speciesId, uint64_t &epoch) {
+  epoch = 0;
+  if (!firebaseReady()) return false;
 
   String field = (speciesId == "dog") ? "dogUntilEpoch" : "catUntilEpoch";
-  return dbGetUInt64(pathOf("/runtime/cooldown/" + field), 0);
+  const double value = Database.get<double>(
+      aClient, pathOf("/runtime/cooldown/" + field));
+  if (!dbOk() || !isfinite(value) || value < 0) return false;
+  epoch = static_cast<uint64_t>(value);
+  return true;
 }
 
 bool firebaseSetCooldownUntil(const String &speciesId, uint64_t epoch) {
@@ -244,6 +315,16 @@ bool firebaseSetFeedingRuntime(const String &status,
   ok &= dbSetFloat(base + "/targetGrams", targetGrams);
   ok &= dbSetFloat(base + "/actualGrams", actualGrams);
   ok &= dbSetBool(base + "/ledOn", ledOn);
+  return ok;
+}
+
+bool firebaseSetLatestDetection(const String &speciesId, float confidence) {
+  if (!firebaseReady()) return false;
+
+  String base = pathOf("/runtime/latestDetection");
+  bool ok = dbSetString(base + "/speciesId", speciesId);
+  ok &= dbSetFloat(base + "/confidence", confidence);
+  ok &= dbSetUInt64(base + "/capturedAtEpoch", currentEpochSeconds());
   return ok;
 }
 
@@ -291,4 +372,7 @@ void firebaseHeartbeat(const String &errorCode) {
   dbSetInt(base + "/wifiRssi", WiFi.RSSI());
   dbSetUInt64(base + "/lastSeenEpoch", currentEpochSeconds());
   dbSetString(base + "/errorCode", errorCode);
+  const bool automatic = firebaseGetAutoFeedEnabled("dog") ||
+                         firebaseGetAutoFeedEnabled("cat");
+  dbSetString(base + "/operatingMode", automatic ? "automatic" : "manual");
 }

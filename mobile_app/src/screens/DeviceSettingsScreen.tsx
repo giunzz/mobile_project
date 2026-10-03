@@ -1,291 +1,108 @@
-import React, { useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Card } from '../components/Card';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
 import { StatusBadge } from '../components/StatusBadge';
 import { useFeeder } from '../context/FeederContext';
+import { isDeviceReady } from '../firebase/deviceContract';
 import { NavigationProps } from '../navigation';
-import { colors, radii, spacing } from '../theme';
-import { formatTimeAgo } from '../utils/format';
+import { colors, spacing } from '../theme';
+import { formatDateTime } from '../utils/format';
+import { useNow } from '../utils/useNow';
 
-interface DetailRowProps {
-  label: string;
-  value: string;
-  last?: boolean;
-}
-
-function DetailRow({ label, value, last = false }: DetailRowProps) {
-  return (
-    <View style={[styles.detailRow, last && styles.detailRowLast]}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
-    </View>
-  );
-}
-
-export function DeviceSettingsScreen({ goBack }: NavigationProps) {
-  const { snapshot, updateDeviceName, updateOperatingMode } = useFeeder();
-  const [name, setName] = useState(snapshot?.device.name ?? '');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [modeSaving, setModeSaving] = useState(false);
+export function DeviceSettingsScreen({ goBack, navigate }: NavigationProps) {
+  const { snapshot } = useFeeder();
+  const now = useNow();
   if (!snapshot) {
     return null;
   }
-
-  const saveName = async () => {
-    const cleanName = name.trim();
-    if (!cleanName) {
-      return;
-    }
-    setSaving(true);
-    try {
-      await updateDeviceName(cleanName);
-      setSaved(true);
-    } catch (error) {
-      Alert.alert(
-        'Firebase update failed',
-        error instanceof Error
-          ? error.message
-          : 'Unable to update the device name.',
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const changeMode = async (mode: 'automatic' | 'manual') => {
-    if (mode === snapshot.device.operatingMode) {
-      return;
-    }
-    setModeSaving(true);
-    try {
-      await updateOperatingMode(mode);
-    } catch (error) {
-      Alert.alert(
-        'Firebase update failed',
-        error instanceof Error
-          ? error.message
-          : 'Unable to update the operating mode.',
-      );
-    } finally {
-      setModeSaving(false);
-    }
-  };
-
+  const { device, runtime } = snapshot;
+  const rows: [string, string][] = [
+    ['Device ID', device.id],
+    ['Firebase connection', snapshot.connected ? 'Connected' : 'Disconnected'],
+    ['Firmware online flag', device.online ? 'Online' : 'Offline'],
+    ['Last heartbeat', formatDateTime(device.lastSync)],
+    ['Error code', device.errorCode],
+    ['Operating mode', device.operatingMode],
+    ['Firmware', device.firmwareVersion],
+    ['IP address', device.ipAddress || 'Not reported'],
+    [
+      'Wi-Fi RSSI',
+      device.wifiRssi === null ? 'Not reported' : `${device.wifiRssi} dBm`,
+    ],
+    ['Feeding state', runtime.feeding.status],
+    ['Active feeder', runtime.feeding.activeSpecies],
+    [
+      'Target',
+      runtime.feeding.targetGrams === null
+        ? 'Not reported'
+        : `${runtime.feeding.targetGrams} g`,
+    ],
+    [
+      'Measured amount',
+      runtime.feeding.actualGrams === null
+        ? 'Not reported'
+        : `${runtime.feeding.actualGrams} g`,
+    ],
+    ['LED', runtime.feeding.ledOn ? 'On' : 'Off'],
+  ];
   return (
     <Screen>
       <AppHeader
+        title="Device status"
+        subtitle="Reported by the ESP32"
         onBack={goBack}
-        subtitle="Connectivity, firmware and edge AI"
-        title="Device settings"
       />
-      <Card style={styles.heroCard}>
-        <View style={styles.deviceIcon}>
-          <Text style={styles.deviceIconText}>◉</Text>
-        </View>
-        <View style={styles.heroCopy}>
-          <Text style={styles.heroName}>{snapshot.device.name}</Text>
-          <Text style={styles.heroId}>ID: {snapshot.device.id}</Text>
-          <StatusBadge
-            label={snapshot.device.online ? 'Online' : 'Offline'}
-            tone={snapshot.device.online ? 'success' : 'danger'}
-          />
-        </View>
+      <StatusBadge
+        label={
+          isDeviceReady(snapshot, now)
+            ? 'Recent healthy heartbeat'
+            : 'Feeder unavailable / stale'
+        }
+        tone={isDeviceReady(snapshot, now) ? 'success' : 'warning'}
+      />
+      <Card style={styles.card}>
+        {rows.map(([label, value]) => (
+          <View key={label} style={styles.row}>
+            <Text style={styles.label}>{label}</Text>
+            <Text selectable style={styles.value}>
+              {value}
+            </Text>
+          </View>
+        ))}
       </Card>
-
-      <Text style={styles.sectionTitle}>Operating mode</Text>
-      <Card>
-        <View style={styles.modeSelector}>
-          {(['automatic', 'manual'] as const).map(mode => {
-            const active = snapshot.device.operatingMode === mode;
-            return (
-              <Pressable
-                disabled={modeSaving}
-                key={mode}
-                onPress={() => changeMode(mode)}
-                style={[styles.modeOption, active && styles.modeOptionActive]}
-              >
-                <Text
-                  style={[styles.modeText, active && styles.modeTextActive]}
-                >
-                  {mode === 'automatic' ? 'AUTO' : 'MANUAL'}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <Text style={styles.modeHint}>
-          {snapshot.device.operatingMode === 'automatic'
-            ? 'Enabled species schedules can trigger feeding automatically.'
-            : 'Automatic schedules are paused; Feed Now remains available.'}
+      <Card style={styles.card}>
+        <Text style={styles.title}>Two separate feeders</Text>
+        <Text style={styles.hint}>Dog: feeder 1 · servo 1 · load cell 1</Text>
+        <Text style={styles.hint}>Cat: feeder 2 · servo 2 · load cell 2</Text>
+        <Text style={styles.hint}>
+          Device status is read-only. Set portions, cooldown and automatic
+          feeding in Species profiles.
         </Text>
       </Card>
-
-      <Text style={styles.sectionTitle}>Device name</Text>
-      <Card>
-        <TextInput
-          onChangeText={value => {
-            setName(value);
-            setSaved(false);
-          }}
-          placeholder="Device name"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={name}
-        />
-        <PrimaryButton
-          disabled={!name.trim() || name.trim() === snapshot.device.name}
-          label={saved ? 'Saved' : 'Save device name'}
-          loading={saving}
-          onPress={saveName}
-          style={styles.saveButton}
-        />
-      </Card>
-
-      <Text style={styles.sectionTitle}>Hardware status</Text>
-      <Card>
-        <DetailRow
-          label="Food container"
-          value={`${snapshot.device.foodLevelPercent}% full`}
-        />
-        <DetailRow
-          label="Wi-Fi signal"
-          value={`${snapshot.device.wifiStrengthPercent}%`}
-        />
-        <DetailRow
-          label="Container lid"
-          value={snapshot.device.lidClosed ? 'Closed' : 'Open'}
-        />
-        <DetailRow label="IP address" value={snapshot.device.ipAddress} />
-        <DetailRow
-          label="Last synchronized"
-          value={formatTimeAgo(snapshot.device.lastSync)}
-          last
-        />
-      </Card>
-
-      <Text style={styles.sectionTitle}>Edge AI information</Text>
-      <Card>
-        <DetailRow label="AI processor" value="ESP32-S3 CAM" />
-        <DetailRow
-          label="Classification model"
-          value={snapshot.device.aiModelName}
-        />
-        <DetailRow
-          label="Classes supported"
-          value={`${snapshot.profiles.length} species`}
-        />
-        <DetailRow
-          label="Firmware version"
-          value={snapshot.device.firmwareVersion}
-          last
-        />
-      </Card>
-
-      <View style={styles.infoBox}>
-        <Text style={styles.infoTitle}>How data flows</Text>
-        <Text style={styles.infoText}>
-          ESP32-S3 CAM classifies the animal locally, then sends species and
-          confidence to Firebase. This mobile app reads that result and applies
-          the matching feeding profile.
-        </Text>
-      </View>
+      <PrimaryButton
+        label="Edit species profiles"
+        onPress={() => navigate('profiles')}
+      />
+      <Text style={styles.hint}>
+        AI detection appears when the firmware reports a valid camera result.
+      </Text>
     </Screen>
   );
 }
-
 const styles = StyleSheet.create({
-  heroCard: { alignItems: 'center', flexDirection: 'row' },
-  deviceIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.primarySoft,
-    borderRadius: radii.lg,
-    height: 80,
-    justifyContent: 'center',
-    marginRight: spacing.lg,
-    width: 80,
-  },
-  deviceIconText: { color: colors.primary, fontSize: 38 },
-  heroCopy: { flex: 1 },
-  heroName: { color: colors.text, fontSize: 19, fontWeight: '900' },
-  heroId: {
-    color: colors.muted,
-    fontSize: 10,
-    marginBottom: spacing.sm,
-    marginTop: 3,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '900',
-    marginBottom: spacing.md,
-    marginTop: spacing.xl,
-  },
-  modeSelector: {
-    backgroundColor: colors.background,
-    borderRadius: radii.md,
+  card: { marginVertical: spacing.lg },
+  row: {
     flexDirection: 'row',
-    padding: 4,
-  },
-  modeOption: {
-    alignItems: 'center',
-    borderRadius: 10,
-    flex: 1,
+    gap: spacing.md,
     paddingVertical: spacing.md,
-  },
-  modeOptionActive: { backgroundColor: colors.primary },
-  modeText: { color: colors.muted, fontSize: 12, fontWeight: '900' },
-  modeTextActive: { color: '#FFF' },
-  modeHint: {
-    color: colors.muted,
-    fontSize: 10,
-    lineHeight: 16,
-    marginTop: spacing.md,
-    textAlign: 'center',
-  },
-  input: {
-    backgroundColor: colors.background,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    color: colors.text,
-    fontSize: 15,
-    height: 52,
-    paddingHorizontal: spacing.lg,
-  },
-  saveButton: { marginTop: spacing.md },
-  detailRow: {
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
   },
-  detailRowLast: { borderBottomWidth: 0, paddingBottom: 0 },
-  detailLabel: { color: colors.muted, flex: 1, fontSize: 12 },
-  detailValue: {
-    color: colors.text,
-    flex: 1.2,
-    fontSize: 12,
-    fontWeight: '800',
-    textAlign: 'right',
-  },
-  infoBox: {
-    backgroundColor: colors.infoSoft,
-    borderRadius: radii.md,
-    marginTop: spacing.xl,
-    padding: spacing.lg,
-  },
-  infoTitle: { color: colors.info, fontSize: 13, fontWeight: '900' },
-  infoText: { color: colors.muted, fontSize: 11, lineHeight: 18, marginTop: 4 },
+  label: { color: colors.muted, flex: 1 },
+  value: { color: colors.text, flex: 1, textAlign: 'right', fontWeight: '600' },
+  title: { color: colors.text, fontSize: 18, fontWeight: '800' },
+  hint: { color: colors.muted, lineHeight: 20, marginTop: spacing.md },
 });

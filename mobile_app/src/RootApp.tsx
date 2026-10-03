@@ -26,8 +26,7 @@ const mainTabs: MainTab[] = [
 ];
 
 export function RootApp() {
-  const { loading, currentUser, dataError, refresh, logout, snapshot } =
-    useFeeder();
+  const { loading, currentUser, dataError, refresh, logout } = useFeeder();
   const [route, setRoute] = useState<AppRoute>('dashboard');
   const [lastMainTab, setLastMainTab] = useState<MainTab>('dashboard');
 
@@ -47,12 +46,16 @@ export function RootApp() {
     return <LoginScreen />;
   }
 
-  if (dataError && !snapshot) {
+  if (dataError) {
     return (
       <Screen bottomInset={false} scroll={false} style={styles.loading}>
         <Text style={styles.errorTitle}>Unable to load Firebase data</Text>
         <Text style={styles.errorText}>{dataError}</Text>
-        <PrimaryButton label="Try again" onPress={refresh} style={styles.action} />
+        <PrimaryButton
+          label="Try again"
+          onPress={refresh}
+          style={styles.action}
+        />
         <PrimaryButton
           label="Sign out"
           onPress={() => {

@@ -5,13 +5,15 @@ export const FIREBASE_DATABASE_URL =
 
 export const FEEDER_DEVICE_ID = 'feeder-01';
 
-/**
- * The mobile demo simulates the ESP32 acknowledgement so the full command
- * lifecycle can be demonstrated with real Firebase writes before hardware is
- * available. Set this to false when the ESP32 firmware consumes pending
- * commands and publishes their result.
- */
-export const DEMO_DEVICE_SIMULATOR_ENABLED = true;
+// Firmware 1.1 expects Unix seconds for outgoing manual commands.
+// Incoming timestamps accept seconds or milliseconds for older records.
+export const COMMAND_EPOCH_UNIT: 'seconds' | 'milliseconds' = 'seconds';
+
+// Firmware heartbeat is every 10 seconds; allow brief network interruptions.
+export const DEVICE_HEARTBEAT_MAX_AGE_MS = 120000;
+
+// Push is outside the current contract. Keep in-app results only.
+export const FIREBASE_MESSAGING_ENABLED = false;
 
 export const getFeederDatabase = () =>
   getDatabase(undefined, FIREBASE_DATABASE_URL);

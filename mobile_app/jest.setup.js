@@ -18,6 +18,7 @@ jest.mock('@react-native-firebase/database', () => ({
   push: jest.fn(),
   ref: jest.fn(),
   remove: jest.fn(),
+  runTransaction: jest.fn(),
   set: jest.fn(),
   update: jest.fn(),
 }));

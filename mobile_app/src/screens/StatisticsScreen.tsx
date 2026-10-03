@@ -75,27 +75,37 @@ export function StatisticsScreen({ goBack }: NavigationProps) {
     cutoff.setDate(cutoff.getDate() - 6);
   }
   const periodHistory = snapshot.history.filter(
-    item => new Date(item.timestamp).getTime() >= cutoff.getTime(),
+    item =>
+      new Date(item.timestamp).getTime() >= cutoff.getTime() &&
+      Date.parse(item.timestamp) <= Date.now(),
   );
   const successful = periodHistory.filter(item => item.result === 'completed');
   const totalGrams = sumCompleted(periodHistory);
   const automatic = successful.filter(item => item.mode === 'automatic').length;
+  const manual = successful.filter(item => item.mode === 'manual').length;
+  const unknown = successful.length - automatic - manual;
   const maxSpeciesGrams = Math.max(
     1,
     ...snapshot.profiles.map(profile =>
       sumCompleted(periodHistory.filter(item => item.speciesId === profile.id)),
     ),
   );
-  const chart = buildChart(snapshot.history, period);
+  const chart = buildChart(periodHistory, period);
   const maxChart = Math.max(1, ...chart.map(item => item.value));
 
   return (
     <Screen>
       <AppHeader
         onBack={goBack}
-        subtitle="Daily and weekly feeding analytics"
+        subtitle="Based on dated firmware history received by this app"
         title="Statistics"
       />
+      {!periodHistory.length ? (
+        <Text style={styles.modeHint}>
+          No dated firmware history for this period. Zero below means no
+          recorded total, not proof of no feeding.
+        </Text>
+      ) : null}
 
       <View style={styles.periodSelector}>
         {(['day', 'week'] as Period[]).map(item => (
@@ -145,7 +155,7 @@ export function StatisticsScreen({ goBack }: NavigationProps) {
                   style={[
                     styles.chartBar,
                     {
-                      height: `${Math.max(4, (point.value / maxChart) * 100)}%`,
+                      height: `${(point.value / maxChart) * 100}%`,
                     },
                   ]}
                 />
@@ -163,18 +173,16 @@ export function StatisticsScreen({ goBack }: NavigationProps) {
         </View>
         <View style={styles.donut}>
           <Text style={styles.donutValue}>
-            {successful.length
-              ? Math.round((automatic / successful.length) * 100)
-              : 0}
-            %
+            {automatic + manual
+              ? `${Math.round((automatic / (automatic + manual)) * 100)}%`
+              : '—'}
           </Text>
-          <Text style={styles.donutLabel}>Auto</Text>
+          <Text style={styles.donutLabel}>Known modes</Text>
         </View>
         <View style={styles.legend}>
           <Text style={styles.autoLegend}>● Automatic: {automatic}</Text>
-          <Text style={styles.manualLegend}>
-            ● Manual: {successful.length - automatic}
-          </Text>
+          <Text style={styles.manualLegend}>● Manual: {manual}</Text>
+          <Text style={styles.manualLegend}>● Unknown: {unknown}</Text>
         </View>
       </Card>
 
@@ -197,10 +205,7 @@ export function StatisticsScreen({ goBack }: NavigationProps) {
                     style={[
                       styles.fill,
                       {
-                        width: `${Math.max(
-                          2,
-                          (grams / maxSpeciesGrams) * 100,
-                        )}%`,
+                        width: `${(grams / maxSpeciesGrams) * 100}%`,
                       },
                     ]}
                   />
@@ -217,19 +222,22 @@ export function StatisticsScreen({ goBack }: NavigationProps) {
           <Text style={styles.performanceLabel}>Successful feed rate</Text>
           <Text style={styles.performanceValue}>
             {periodHistory.length
-              ? Math.round((successful.length / periodHistory.length) * 100)
-              : 0}
-            %
+              ? `${Math.round(
+                  (successful.length / periodHistory.length) * 100,
+                )}%`
+              : '—'}
           </Text>
         </View>
         <View style={styles.performanceRow}>
           <Text style={styles.performanceLabel}>AI confidence (latest)</Text>
           <Text style={styles.performanceValue}>
-            {Math.round(snapshot.detection.confidence * 100)}%
+            {snapshot.detection.speciesId === 'none'
+              ? 'Not available'
+              : `${Math.round(snapshot.detection.confidence * 100)}%`}
           </Text>
         </View>
         <View style={styles.performanceRowLast}>
-          <Text style={styles.performanceLabel}>Active schedules</Text>
+          <Text style={styles.performanceLabel}>Enabled schedules</Text>
           <Text style={styles.performanceValue}>
             {snapshot.schedules.filter(item => item.enabled).length}
           </Text>
@@ -280,7 +288,6 @@ const styles = StyleSheet.create({
   chartBar: {
     backgroundColor: colors.primary,
     borderRadius: 6,
-    minHeight: 4,
     width: '100%',
   },
   chartLabel: { color: colors.muted, fontSize: 9, marginTop: 6 },

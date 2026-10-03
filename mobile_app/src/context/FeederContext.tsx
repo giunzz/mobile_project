@@ -15,6 +15,7 @@ import {
   signOut,
 } from '@react-native-firebase/auth';
 import { configureFirebaseMessaging } from '../firebase/messaging';
+import { FIREBASE_MESSAGING_ENABLED } from '../firebase/config';
 import { FeederRepository } from '../repositories/FeederRepository';
 import { FirebaseFeederRepository } from '../repositories/FirebaseFeederRepository';
 import {
@@ -79,6 +80,7 @@ export function FeederProvider({ children }: PropsWithChildren) {
   const [authLoading, setAuthLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [subscriptionVersion, setSubscriptionVersion] = useState(0);
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const repositoryRef = useRef<FeederRepository | null>(null);
 
@@ -91,9 +93,7 @@ export function FeederProvider({ children }: PropsWithChildren) {
           ? {
               id: user.uid,
               name:
-                user.displayName ??
-                user.email?.split('@')[0] ??
-                'Pet Owner',
+                user.displayName ?? user.email?.split('@')[0] ?? 'Pet Owner',
               email: user.email ?? '',
             }
           : null,
@@ -116,23 +116,24 @@ export function FeederProvider({ children }: PropsWithChildren) {
       currentUser.name,
     );
     repositoryRef.current = repository;
+    setSnapshot(null);
     setDataLoading(true);
     setDataError(null);
     return repository.subscribe(
-        nextSnapshot => {
-          setSnapshot(nextSnapshot);
-          setDataError(null);
-          setDataLoading(false);
-        },
-        error => {
-          setDataError(error.message);
-          setDataLoading(false);
-        },
-      );
-  }, [currentUser]);
+      nextSnapshot => {
+        setSnapshot(nextSnapshot);
+        setDataError(null);
+        setDataLoading(false);
+      },
+      error => {
+        setDataError(error.message);
+        setDataLoading(false);
+      },
+    );
+  }, [currentUser, subscriptionVersion]);
 
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser || !FIREBASE_MESSAGING_ENABLED) {
       return;
     }
     let active = true;
@@ -171,21 +172,21 @@ export function FeederProvider({ children }: PropsWithChildren) {
       currentUser,
       login: async (email: string, password: string) => {
         if (!email.trim() || password.length < 6) {
-          throw new Error('Enter an email and a password of at least 6 characters.');
+          throw new Error(
+            'Enter an email and a password of at least 6 characters.',
+          );
         }
         try {
-          await signInWithEmailAndPassword(
-            getAuth(),
-            email.trim(),
-            password,
-          );
+          await signInWithEmailAndPassword(getAuth(), email.trim(), password);
         } catch (error) {
           throw firebaseAuthError(error);
         }
       },
       register: async (email: string, password: string) => {
         if (!email.trim() || password.length < 6) {
-          throw new Error('Enter an email and a password of at least 6 characters.');
+          throw new Error(
+            'Enter an email and a password of at least 6 characters.',
+          );
         }
         try {
           await createUserWithEmailAndPassword(
@@ -200,16 +201,7 @@ export function FeederProvider({ children }: PropsWithChildren) {
       logout: () => signOut(getAuth()),
       refresh: async () => {
         setDataLoading(true);
-        try {
-          setSnapshot(await getRepository().getSnapshot());
-          setDataError(null);
-        } catch (error) {
-          setDataError(
-            error instanceof Error ? error.message : 'Unable to load data.',
-          );
-        } finally {
-          setDataLoading(false);
-        }
+        setSubscriptionVersion(version => version + 1);
       },
       updateProfile: async profile => {
         await getRepository().updateProfile(profile);

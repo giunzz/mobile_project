@@ -6,7 +6,7 @@ void feedbackBegin() {
   pinMode(LED_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
-  noTone(BUZZER_PIN);
+  digitalWrite(BUZZER_PIN, LOW);
 }
 
 void feedingLed(bool on) {

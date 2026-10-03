@@ -26,26 +26,28 @@ export function HistoryScreen({ goBack }: NavigationProps) {
     <Screen>
       <AppHeader
         onBack={goBack}
-        subtitle="Every automatic and manual command"
+        subtitle="Measured feeding history reported by firmware"
         title="Feeding history"
       />
       <View style={styles.filters}>
-        {(['all', 'automatic', 'manual'] as HistoryFilter[]).map(item => (
-          <Pressable
-            key={item}
-            onPress={() => setFilter(item)}
-            style={[styles.filter, filter === item && styles.filterActive]}
-          >
-            <Text
-              style={[
-                styles.filterText,
-                filter === item && styles.filterTextActive,
-              ]}
+        {(['all', 'automatic', 'manual', 'unknown'] as HistoryFilter[]).map(
+          item => (
+            <Pressable
+              key={item}
+              onPress={() => setFilter(item)}
+              style={[styles.filter, filter === item && styles.filterActive]}
             >
-              {item.charAt(0).toUpperCase() + item.slice(1)}
-            </Text>
-          </Pressable>
-        ))}
+              <Text
+                style={[
+                  styles.filterText,
+                  filter === item && styles.filterTextActive,
+                ]}
+              >
+                {item.charAt(0).toUpperCase() + item.slice(1)}
+              </Text>
+            </Pressable>
+          ),
+        )}
       </View>
 
       {rows.map(item => {
@@ -81,7 +83,12 @@ export function HistoryScreen({ goBack }: NavigationProps) {
 }
 
 const styles = StyleSheet.create({
-  filters: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xl },
+  filters: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
+  },
   filter: {
     backgroundColor: colors.surface,
     borderColor: colors.border,

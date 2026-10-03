@@ -18,6 +18,11 @@ Arduino IDE libraries required
    Features used:
    UserAuth + RealtimeDatabase
 
+5. TensorFlowLite_ESP32 (hoặc TensorFlow Lite for Microcontrollers)
+   Tìm trong Arduino Library Manager: "TensorFlowLite_ESP32"
+   Header: <TensorFlowLite_ESP32.h>
+   Dùng cho: Tải mô hình Edge AI, cấp phát tensor arena trong PSRAM, và chạy suy luận mạng nơ-ron (CNN).
+
 Built-in ESP32/Arduino components:
 - WiFi
 - WiFiClientSecure

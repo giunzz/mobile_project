@@ -4,6 +4,7 @@
 
 void feedingControllerBegin();
 void feedingControllerLoop();
+void feedingScheduleLoop();
 
 bool feedSpecies(const String &speciesId,
                  float requestedTargetGrams,
@@ -11,3 +12,4 @@ bool feedSpecies(const String &speciesId,
                  const String &mode);
 
 void feedingControllerHandleSerialCommand(const String &line);
+void feedingControllerResetCooldown();
