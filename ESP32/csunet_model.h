@@ -30,12 +30,6 @@ typedef struct {
     float confidence;
 } CSUNetResult;
 
-/* Workspace must be aligned for float (malloc/ps_malloc are suitable).
- * Input must be external to the activation area, or at workspace start.
- * One workspace per simultaneous inference. There is no global mutable state.
- * Optional hook runs between convolutions so an embedded caller can yield.
- * Do not call this model recursively using the same workspace in a hook.
- */
 typedef void (*CSUNetYieldHook)(void *user);
 size_t csunet_workspace_bytes(void);
 const char *csunet_class_name(int class_id);

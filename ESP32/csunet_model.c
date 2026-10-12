@@ -1,4 +1,3 @@
-/* CSUNet-SSR-S3 inference in ISO C11. No TensorFlow, PyTorch or C++ runtime. */
 #include "csunet_model.h"
 #include "csunet_weights.h"
 #include <float.h>
